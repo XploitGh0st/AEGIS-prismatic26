@@ -38,8 +38,12 @@ async def close_redis() -> None:
 
 async def enqueue(queue_name: str, payload: dict[str, Any]) -> None:
     """Push a JSON payload onto a Redis list (queue)."""
-    r = await get_redis()
-    await r.rpush(queue_name, json.dumps(payload))
+    import asyncio
+    try:
+        r = await get_redis()
+        await asyncio.wait_for(r.rpush(queue_name, json.dumps(payload)), timeout=2.0)
+    except Exception as e:
+        print(f"Skipping Redis enqueue for {queue_name} (Redis unavailable): {e}")
 
 
 async def dequeue(queue_name: str, timeout: int = 5) -> dict[str, Any] | None:
