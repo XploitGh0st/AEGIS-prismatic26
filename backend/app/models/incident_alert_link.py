@@ -8,10 +8,10 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.types import PortableUUID
 
 
 class IncidentAlertLink(Base):
@@ -20,14 +20,14 @@ class IncidentAlertLink(Base):
     __tablename__ = "incident_alert_links"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        PortableUUID(), primary_key=True, default=uuid.uuid4
     )
     incident_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"),
+        PortableUUID(), ForeignKey("incidents.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
     normalized_alert_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("normalized_alerts.id", ondelete="CASCADE"),
+        PortableUUID(), ForeignKey("normalized_alerts.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
     attached_at: Mapped[datetime] = mapped_column(

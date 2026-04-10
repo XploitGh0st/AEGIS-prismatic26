@@ -8,10 +8,10 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.types import PortableJSON, PortableUUID
 
 
 class CorrelationMatch(Base):
@@ -23,14 +23,14 @@ class CorrelationMatch(Base):
     __tablename__ = "correlation_matches"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        PortableUUID(), primary_key=True, default=uuid.uuid4
     )
     incident_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"),
+        PortableUUID(), ForeignKey("incidents.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
     normalized_alert_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("normalized_alerts.id", ondelete="CASCADE"),
+        PortableUUID(), ForeignKey("normalized_alerts.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
 
@@ -40,7 +40,7 @@ class CorrelationMatch(Base):
         comment="Total correlation score that led to attachment"
     )
     reason_codes: Mapped[dict] = mapped_column(
-        JSONB, nullable=False,
+        PortableJSON(), nullable=False,
         comment="Individual scoring reasons, e.g. {same_user: 20, same_source_ip: 15, ...}"
     )
 

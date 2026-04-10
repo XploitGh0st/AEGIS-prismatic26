@@ -8,10 +8,10 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, Float, ForeignKey, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.types import PortableArray, PortableJSON, PortableUUID
 
 
 class NormalizedAlert(Base):
@@ -25,10 +25,10 @@ class NormalizedAlert(Base):
     __tablename__ = "normalized_alerts"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        PortableUUID(), primary_key=True, default=uuid.uuid4
     )
     raw_alert_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("raw_alerts.id", ondelete="CASCADE"),
+        PortableUUID(), ForeignKey("raw_alerts.id", ondelete="CASCADE"),
         nullable=False, unique=True, index=True,
     )
 
@@ -67,7 +67,7 @@ class NormalizedAlert(Base):
 
     # ── MITRE ATT&CK ────────────────────────────────────
     mitre_technique_ids: Mapped[list[str] | None] = mapped_column(
-        ARRAY(String(20)), nullable=True,
+        PortableArray(String(20)), nullable=True,
         comment="E.g. ['T1110', 'T1078']"
     )
     mitre_tactic: Mapped[str | None] = mapped_column(
@@ -78,7 +78,7 @@ class NormalizedAlert(Base):
     # ── Extra context ────────────────────────────────────
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     risk_flags: Mapped[list[str] | None] = mapped_column(
-        ARRAY(String(100)), nullable=True,
+        PortableArray(String(100)), nullable=True,
         comment="E.g. ['suspicious_download', 'credential_harvesting']"
     )
     raw_command: Mapped[str | None] = mapped_column(
@@ -86,7 +86,7 @@ class NormalizedAlert(Base):
         comment="Original command if applicable (e.g., Cowrie command input)"
     )
     extra_data: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True,
+        PortableJSON(), nullable=True,
         comment="Additional adapter-specific normalized data"
     )
 

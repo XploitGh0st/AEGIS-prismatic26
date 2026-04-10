@@ -1,7 +1,7 @@
 """
 Summary Service — generates AI or deterministic investigation summaries.
 
-Uses OpenAI GPT-4.5 with a validated RCA bundle as input.
+Uses Mistral AI (mistral-large) with a validated RCA bundle as input.
 Falls back to template-based deterministic summaries if LLM fails.
 """
 
@@ -20,6 +20,7 @@ from app.core.logging import get_logger
 from app.models.incident import Incident
 from app.models.incident_summary import IncidentSummary
 from app.services.rca_service import build_rca_bundle
+from app.services.memory_service import get_wake_up_context, save_incident_to_palace
 
 log = get_logger("summary")
 settings = get_settings()
@@ -130,6 +131,16 @@ async def generate_summary(
     session.add(summary)
     await session.flush()
 
+    # Save to MemPalace for persistent memory
+    await save_incident_to_palace(
+        incident_id=str(incident.id),
+        incident_number=incident.incident_number,
+        classification=incident.classification,
+        primary_src_ip=incident.primary_src_ip,
+        summary_text=summary.executive_summary,
+        mitre_techniques=incident.mitre_techniques,
+    )
+
     log.info(
         "summary_generated",
         incident_id=str(incident.id),
@@ -144,20 +155,23 @@ async def generate_summary(
 async def _generate_ai_summary(
     rca_bundle: dict,
 ) -> tuple[dict, str, int, int]:
-    """Call OpenAI API to generate an AI summary."""
-    import openai
+    """Call Mistral AI API to generate an AI summary."""
+    from mistralai.client.sdk import Mistral
 
-    client = openai.AsyncOpenAI(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url,
-    )
+    client = Mistral(api_key=settings.mistral_api_key)
+
+    # Inject MemPalace wake-up context if available
+    wake_up_context = get_wake_up_context()
+    system_prompt = SYSTEM_PROMPT
+    if wake_up_context:
+        system_prompt += f"\n\n## AEGIS Memory Context (MemPalace L0+L1)\n{wake_up_context}\n\nUse the above context to reference prior attacker behavior when relevant.\nIf an attacker IP has been seen before, say so explicitly."
 
     user_prompt = f"Generate an investigation summary for this incident:\n\n{json.dumps(rca_bundle, indent=2, default=str)}"
 
-    response = await client.chat.completions.create(
-        model=settings.openai_model,
+    response = await client.chat.complete_async(
+        model=settings.mistral_model,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
         temperature=0.3,

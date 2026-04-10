@@ -8,10 +8,10 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.types import PortableJSON, PortableUUID
 
 
 class IncidentSummary(Base):
@@ -23,10 +23,10 @@ class IncidentSummary(Base):
     __tablename__ = "incident_summaries"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        PortableUUID(), primary_key=True, default=uuid.uuid4
     )
     incident_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("incidents.id", ondelete="CASCADE"),
+        PortableUUID(), ForeignKey("incidents.id", ondelete="CASCADE"),
         nullable=False, index=True,
     )
     version: Mapped[int] = mapped_column(
@@ -48,11 +48,11 @@ class IncidentSummary(Base):
         comment="Root cause analysis"
     )
     observed_facts: Mapped[list | None] = mapped_column(
-        JSONB, nullable=True,
+        PortableJSON(), nullable=True,
         comment="List of confirmed observations"
     )
     recommended_actions: Mapped[list | None] = mapped_column(
-        JSONB, nullable=True,
+        PortableJSON(), nullable=True,
         comment="List of suggested next steps"
     )
     confidence_notes: Mapped[str | None] = mapped_column(
@@ -78,13 +78,13 @@ class IncidentSummary(Base):
         comment="Whether the summary passed hallucination validation"
     )
     validation_errors: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True,
+        PortableJSON(), nullable=True,
         comment="Details of any validation failures"
     )
 
     # ── RCA bundle snapshot ──────────────────────────────
     rca_bundle: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True,
+        PortableJSON(), nullable=True,
         comment="Snapshot of the RCA bundle used to generate this summary"
     )
 

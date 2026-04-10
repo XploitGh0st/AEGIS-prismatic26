@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.services.memory_service import enrich_rca_bundle
 from app.models.correlation_match import CorrelationMatch
 from app.models.incident import Incident
 from app.models.incident_alert_link import IncidentAlertLink
@@ -110,11 +111,15 @@ async def build_rca_bundle(
         "scoring_breakdown": incident.scoring_breakdown or {},
     }
 
+    # ── MemPalace enrichment (if available) ───────────────
+    bundle = enrich_rca_bundle(bundle)
+
     log.info(
         "rca_bundle_built",
         incident_id=str(incident.id),
         alert_count=len(alerts),
         fact_count=len(facts),
+        mempalace_enriched="attacker_history" in bundle,
     )
 
     return bundle

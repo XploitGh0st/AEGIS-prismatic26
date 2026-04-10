@@ -8,10 +8,10 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, Float, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
+from app.models.types import PortableArray, PortableJSON, PortableUUID
 
 
 class Incident(Base):
@@ -24,7 +24,7 @@ class Incident(Base):
     __tablename__ = "incidents"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        PortableUUID(), primary_key=True, default=uuid.uuid4
     )
     incident_number: Mapped[str] = mapped_column(
         String(30), nullable=False, unique=True, index=True,
@@ -69,11 +69,11 @@ class Incident(Base):
 
     # ── MITRE ATT&CK ────────────────────────────────────
     mitre_techniques: Mapped[list[str] | None] = mapped_column(
-        ARRAY(String(20)), nullable=True,
+        PortableArray(String(20)), nullable=True,
         comment="Aggregated MITRE techniques from all alerts"
     )
     mitre_tactics: Mapped[list[str] | None] = mapped_column(
-        ARRAY(String(50)), nullable=True,
+        PortableArray(String(50)), nullable=True,
         comment="Aggregated MITRE tactics"
     )
 
@@ -83,13 +83,13 @@ class Incident(Base):
         comment="Number of correlated alerts"
     )
     source_families: Mapped[list[str] | None] = mapped_column(
-        ARRAY(String(50)), nullable=True,
+        PortableArray(String(50)), nullable=True,
         comment="Unique source families: siem, edr, ids, honeypot"
     )
 
     # ── Scoring breakdown ────────────────────────────────
     scoring_breakdown: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True,
+        PortableJSON(), nullable=True,
         comment="Detailed score component breakdown"
     )
 

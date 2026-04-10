@@ -8,10 +8,10 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
+from app.models.types import PortableJSON, PortableUUID
 
 
 class RawAlert(Base):
@@ -20,7 +20,7 @@ class RawAlert(Base):
     __tablename__ = "raw_alerts"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        PortableUUID(), primary_key=True, default=uuid.uuid4
     )
     source_family: Mapped[str] = mapped_column(
         String(50), nullable=False, index=True,
@@ -39,7 +39,7 @@ class RawAlert(Base):
         comment="When the event actually occurred (from source)"
     )
     payload: Mapped[dict] = mapped_column(
-        JSONB, nullable=False,
+        PortableJSON(), nullable=False,
         comment="Full raw JSON payload from the source"
     )
     ingested_at: Mapped[datetime] = mapped_column(

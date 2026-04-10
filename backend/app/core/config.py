@@ -46,10 +46,9 @@ class Settings(BaseSettings):
     opensearch_host: str = "http://localhost:9200"
     opensearch_alert_index: str = "alerts-v1"
 
-    # ── OpenAI / LLM ────────────────────────────────────
-    openai_api_key: str = "replace_me"
-    openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = "gpt-4.5-preview"
+    # ── Mistral AI / LLM ─────────────────────────────────
+    mistral_api_key: str = "replace_me"
+    mistral_model: str = "mistral-large-latest"
     summary_generation_enabled: bool = True
 
     # ── Splunk Bridge ────────────────────────────────────
