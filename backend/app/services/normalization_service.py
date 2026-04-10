@@ -18,6 +18,7 @@ from app.services.adapters.base import BaseAdapter, CanonicalAlert
 from app.services.adapters.cowrie_splunk_adapter import CowrieSplunkAdapter
 from app.services.adapters.edr_adapter import EDRAdapter
 from app.services.adapters.ids_adapter import IDSAdapter
+from app.services.adapters.pcap_adapter import PcapAdapter
 from app.services.adapters.siem_adapter import SIEMAdapter
 from app.utils.fingerprints import compute_entity_fingerprint
 
@@ -26,6 +27,7 @@ log = get_logger("normalization")
 # ── Adapter registry ─────────────────────────────────────
 ADAPTERS: list[BaseAdapter] = [
     CowrieSplunkAdapter(),
+    PcapAdapter(),
     SIEMAdapter(),
     EDRAdapter(),
     IDSAdapter(),

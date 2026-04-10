@@ -75,6 +75,8 @@ export type IncidentSummary = {
   generation_type: string;
   executive_summary: string;
   root_cause?: string | null;
+  observed_facts?: string[] | null;
+  recommended_actions?: string[] | null;
   confidence_notes?: string | null;
   model_used?: string | null;
   generated_at: string;
@@ -84,7 +86,81 @@ export type IncidentDetail = Incident & {
   primary_dst_ip?: string | null;
   mitre_tactics?: string[] | null;
   scoring_breakdown?: Record<string, unknown> | null;
-  alerts: Array<{ id: string; event_name: string; event_time?: string; severity: string }>;
+  alerts: Array<{
+    id: string;
+    event_name: string;
+    event_time?: string;
+    severity: string;
+    source_ip?: string | null;
+    source_family?: string;
+    description?: string | null;
+  }>;
   summaries: IncidentSummary[];
-  correlation_matches: Array<{ total_score: number; reason_codes: Record<string, unknown>; match_type: string }>;
+  correlation_matches: Array<{
+    total_score: number;
+    reason_codes: Record<string, unknown>;
+    match_type: string;
+    matched_entity?: string | null;
+  }>;
+};
+
+// ── PCAP Types ──────────────────────────────────────────
+
+export type PcapUploadResponse = {
+  pcap_id: string;
+  filename: string;
+  file_size_bytes: number;
+  status: string;
+  alerts_generated: number;
+  incidents_created: string[];
+  message: string;
+};
+
+// ── MemPalace Types ─────────────────────────────────────
+
+export type AttackerTriple = {
+  predicate: string;
+  object: string;
+  valid_from: string;
+};
+
+export type AttackerIntel = {
+  ip: string;
+  triples: AttackerTriple[];
+  total: number;
+};
+
+export type AttackerTimelineEntry = {
+  time: string;
+  action: string;
+  detail: string;
+};
+
+export type AttackerTimeline = {
+  ip: string;
+  timeline: AttackerTimelineEntry[];
+  total_events: number;
+};
+
+export type MemPalaceStatus = {
+  available: boolean;
+  stats: {
+    enabled: boolean;
+    total_triples: number;
+    total_entities: number;
+    palace_path: string;
+    wing_attackers_count: number;
+    wing_incidents_count: number;
+    wing_soc_analyst_count: number;
+    [key: string]: unknown;
+  };
+};
+
+export type MemorySearchResult = {
+  text: string;
+  score: number;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  room: string;
+  matching_keywords: string[];
 };

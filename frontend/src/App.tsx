@@ -3,6 +3,7 @@ import Layout from "./components/Layout";
 import DashboardPage from "./pages/DashboardPage";
 import IncidentsPage from "./pages/IncidentsPage";
 import IncidentDetailPage from "./pages/IncidentDetailPage";
+import PcapUploadPage from "./pages/PcapUploadPage";
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/incidents" element={<IncidentsPage />} />
         <Route path="/incidents/:incidentId" element={<IncidentDetailPage />} />
+        <Route path="/pcap" element={<PcapUploadPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

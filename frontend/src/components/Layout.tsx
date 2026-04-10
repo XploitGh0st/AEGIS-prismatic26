@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
+import { getMemPalaceStatus } from "../lib/api";
 
 const navLinkClasses = ({ isActive }: { isActive: boolean }) =>
   `sidebar-link rounded-xl px-3 py-2 text-sm font-medium transition ${
@@ -9,6 +11,21 @@ const navLinkClasses = ({ isActive }: { isActive: boolean }) =>
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
+  const [mempalaceOnline, setMempalaceOnline] = useState(false);
+
+  useEffect(() => {
+    getMemPalaceStatus()
+      .then((status) => setMempalaceOnline(status.available))
+      .catch(() => setMempalaceOnline(false));
+  }, []);
+
+  const pageLabel = () => {
+    if (location.pathname === "/") return "Overview";
+    if (location.pathname === "/pcap") return "PCAP Analysis";
+    if (location.pathname === "/incidents") return "Incident Queue";
+    if (location.pathname.startsWith("/incidents/")) return "Incident Dossier";
+    return location.pathname;
+  };
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-aegis-bg text-slate-100">
@@ -29,18 +46,39 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           <nav className="mt-6 space-y-2">
             <NavLink to="/" className={navLinkClasses} end>
-              Overview
+              <span className="mr-2">◆</span> Overview
             </NavLink>
             <NavLink to="/incidents" className={navLinkClasses}>
-              Incident Queue
+              <span className="mr-2">◆</span> Incident Queue
+            </NavLink>
+            <NavLink to="/pcap" className={navLinkClasses}>
+              <span className="mr-2">◆</span> PCAP Analysis
             </NavLink>
           </nav>
 
-          <div className="mt-8 rounded-2xl border border-white/10 bg-black/25 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">System State</p>
-            <div className="mt-3 flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
-              <span className="text-sm text-slate-200">Telemetry Online</span>
+          <div className="mt-8 space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">System State</p>
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.8)]" />
+                  <span className="text-sm text-slate-200">Telemetry Online</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`h-2.5 w-2.5 rounded-full ${
+                    mempalaceOnline
+                      ? "bg-aegis-purple shadow-[0_0_10px_rgba(142,77,255,0.8)]"
+                      : "bg-slate-500"
+                  }`} />
+                  <span className="text-sm text-slate-200">
+                    MemPalace {mempalaceOnline ? "Active" : "Offline"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-aegis-cyan shadow-[0_0_10px_rgba(39,245,255,0.8)]" />
+                  <span className="text-sm text-slate-200">DPI Engine Ready</span>
+                </div>
+              </div>
             </div>
           </div>
         </aside>
@@ -50,7 +88,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Navigation</p>
-                <p className="mt-1 text-sm text-white">{location.pathname === "/" ? "Overview" : location.pathname}</p>
+                <p className="mt-1 text-sm text-white">{pageLabel()}</p>
               </div>
               <div className="flex items-center gap-3">
                 <div className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-slate-300">Cyber Ops</div>

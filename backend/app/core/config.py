@@ -70,9 +70,12 @@ class Settings(BaseSettings):
 
     # ── MemPalace ────────────────────────────────────────
     mempalace_enabled: bool = False
-    mempalace_palace_path: str = "~/.mempalace/aegis/"
+    mempalace_palace_path: str = "~/.aegis/mempalace/"
     mempalace_mcp_port: int = 6333
     mempalace_wake_up_wing: str = "wing_attackers"
+
+    # ── PCAP Analysis ────────────────────────────────────
+    pcap_upload_dir: str = "./pcap_uploads"
 
     @property
     def async_database_url(self) -> str:

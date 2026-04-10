@@ -36,6 +36,12 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "structlog>=24.4.0",
     "orjson>=3.10.0",
+
+    # PCAP Analysis
+    "scapy>=2.6.0",
+
+    # PDF Report Generation
+    "reportlab>=4.0.0",
 ]
 
 [project.optional-dependencies]
