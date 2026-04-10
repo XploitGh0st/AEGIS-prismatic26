@@ -1,0 +1,200 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-aegis-bg text-slate-100 antialiased;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 45% -10%, rgba(39, 245, 255, 0.16), transparent 36%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 90% 10%, rgba(255, 47, 191, 0.11), transparent 28%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.noise-overlay {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 3px 3px;
+}
+
+.grid-overlay {
+  background-image:
+    linear-gradient(rgba(39, 245, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(39, 245, 255, 0.08) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at center, black 35%, transparent 90%);
+}
+
+.scanline::before {
+  content: "";
+  position: absolute;
+  inset: -30% 0;
+  height: 30%;
+  background: linear-gradient(to bottom, transparent, rgba(39, 245, 255, 0.12), transparent);
+  animation: scanline 6s linear infinite;
+}
+
+.app-sidebar,
+.topbar,
+.surface-card,
+.metric-card {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.24);
+}
+
+.surface-card,
+.metric-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.surface-card::after,
+.metric-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.app-main {
+  padding: 2px;
+}
+
+.panel-title {
+  @apply text-xs uppercase tracking-[0.2em] text-slate-400;
+}
+
+.orb {
+  width: 260px;
+  height: 260px;
+  border-radius: 999px;
+  filter: blur(54px);
+  animation: pulseGlow 5s ease-in-out infinite;
+}
+
+.orb-cyan {
+  background: rgba(39, 245, 255, 0.18);
+}
+
+.orb-pink {
+  background: rgba(255, 47, 191, 0.16);
+}
+
+.alert-row,
+.incident-row {
+  transition: transform 220ms ease, border-color 220ms ease, background-color 220ms ease, box-shadow 220ms ease;
+}
+
+.alert-row:hover,
+.incident-row:hover {
+  transform: translateX(3px);
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 3px 0 0 rgba(39, 245, 255, 0.45);
+}
+
+.table-row-neo {
+  transition: background-color 220ms ease, box-shadow 220ms ease;
+}
+
+.table-row-neo:hover {
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 3px 0 0 rgba(255, 255, 255, 0.45);
+}
+
+.severity-chip,
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.severity-critical {
+  color: #ffb7c3;
+  border-color: rgba(255, 77, 109, 0.4);
+  background: rgba(255, 77, 109, 0.15);
+}
+
+.severity-high {
+  color: #ffd8a1;
+  border-color: rgba(255, 176, 32, 0.45);
+  background: rgba(255, 176, 32, 0.14);
+}
+
+.severity-medium {
+  color: #a7f8ff;
+  border-color: rgba(39, 245, 255, 0.45);
+  background: rgba(39, 245, 255, 0.14);
+}
+
+.severity-low {
+  color: #d6ffb9;
+  border-color: rgba(139, 255, 58, 0.45);
+  background: rgba(139, 255, 58, 0.14);
+}
+
+.status-new {
+  color: #a7f8ff;
+  border-color: rgba(39, 245, 255, 0.45);
+  background: rgba(39, 245, 255, 0.14);
+}
+
+.status-progress {
+  color: #ffd8a1;
+  border-color: rgba(255, 176, 32, 0.45);
+  background: rgba(255, 176, 32, 0.14);
+}
+
+.status-resolved {
+  color: #d6ffb9;
+  border-color: rgba(139, 255, 58, 0.45);
+  background: rgba(139, 255, 58, 0.14);
+}
+
+.status-muted {
+  color: #d1d5db;
+  border-color: rgba(148, 163, 184, 0.45);
+  background: rgba(148, 163, 184, 0.14);
+}
+
+@media (max-width: 1100px) {
+  .app-sidebar {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
