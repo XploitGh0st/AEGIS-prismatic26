@@ -1,0 +1,85 @@
+{
+  "description": "Account compromise: brute force → successful login → suspicious process execution → data access",
+  "expected_incidents": 1,
+  "expected_severity": "critical",
+  "expected_classification": "account_compromise",
+  "alerts": [
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "ac_001",
+      "event_time": "2026-04-09T10:00:00.000Z",
+      "payload": {
+        "event_type": "failed_login",
+        "timestamp": "2026-04-09T10:00:00.000Z",
+        "src_ip": "203.0.113.50",
+        "dst_ip": "10.0.1.20",
+        "username": "jsmith",
+        "host": "dc01.corp.local",
+        "description": "Multiple failed login attempts for jsmith"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "ac_002",
+      "event_time": "2026-04-09T10:05:00.000Z",
+      "payload": {
+        "event_type": "success_login",
+        "timestamp": "2026-04-09T10:05:00.000Z",
+        "src_ip": "203.0.113.50",
+        "dst_ip": "10.0.1.20",
+        "username": "jsmith",
+        "host": "dc01.corp.local",
+        "description": "Successful login after multiple failures"
+      }
+    },
+    {
+      "source_family": "edr",
+      "source_type": "crowdstrike_mock",
+      "external_alert_id": "ac_003",
+      "event_time": "2026-04-09T10:07:00.000Z",
+      "payload": {
+        "event_type": "process_created",
+        "timestamp": "2026-04-09T10:07:00.000Z",
+        "src_ip": "10.0.1.20",
+        "user": "jsmith",
+        "host": "dc01.corp.local",
+        "process_name": "powershell.exe",
+        "command_line": "powershell -enc SQBFAFgAKABOAGUAdwAtAE8AYgBq...",
+        "encoded": true,
+        "description": "Encoded PowerShell execution after login"
+      }
+    },
+    {
+      "source_family": "edr",
+      "source_type": "crowdstrike_mock",
+      "external_alert_id": "ac_004",
+      "event_time": "2026-04-09T10:10:00.000Z",
+      "payload": {
+        "event_type": "credential_dump",
+        "timestamp": "2026-04-09T10:10:00.000Z",
+        "user": "jsmith",
+        "host": "dc01.corp.local",
+        "process_name": "lsass.exe",
+        "description": "Credential dumping via LSASS memory access"
+      }
+    },
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "ac_005",
+      "event_time": "2026-04-09T10:12:00.000Z",
+      "payload": {
+        "event_type": "outbound_c2",
+        "timestamp": "2026-04-09T10:12:00.000Z",
+        "src_ip": "10.0.1.20",
+        "dst_ip": "198.51.100.99",
+        "src_port": 49821,
+        "dst_port": 443,
+        "sensor": "ids01",
+        "description": "Suspected C2 beacon to known bad IP"
+      }
+    }
+  ]
+}

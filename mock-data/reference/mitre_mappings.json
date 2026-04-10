@@ -1,0 +1,27 @@
+{
+  "techniques": {
+    "T1046": { "name": "Network Service Discovery", "tactic": "reconnaissance" },
+    "T1110": { "name": "Brute Force", "tactic": "credential-access" },
+    "T1078": { "name": "Valid Accounts", "tactic": "initial-access" },
+    "T1059": { "name": "Command and Scripting Interpreter", "tactic": "execution" },
+    "T1105": { "name": "Ingress Tool Transfer", "tactic": "command-and-control" },
+    "T1572": { "name": "Protocol Tunneling", "tactic": "command-and-control" },
+    "T1204": { "name": "User Execution", "tactic": "execution" },
+    "T1548": { "name": "Abuse Elevation Control Mechanism", "tactic": "privilege-escalation" },
+    "T1134": { "name": "Access Token Manipulation", "tactic": "privilege-escalation" },
+    "T1055": { "name": "Process Injection", "tactic": "defense-evasion" },
+    "T1041": { "name": "Exfiltration Over C2 Channel", "tactic": "exfiltration" },
+    "T1071": { "name": "Application Layer Protocol", "tactic": "command-and-control" },
+    "T1573": { "name": "Encrypted Channel", "tactic": "command-and-control" },
+    "T1543": { "name": "Create or Modify System Process", "tactic": "persistence" },
+    "T1547": { "name": "Boot or Logon Autostart Execution", "tactic": "persistence" },
+    "T1003": { "name": "OS Credential Dumping", "tactic": "credential-access" },
+    "T1027": { "name": "Obfuscated Files or Information", "tactic": "defense-evasion" },
+    "T1190": { "name": "Exploit Public-Facing Application", "tactic": "initial-access" },
+    "T1021": { "name": "Remote Services", "tactic": "lateral-movement" },
+    "T1498": { "name": "Network Denial of Service", "tactic": "impact" },
+    "T1048": { "name": "Exfiltration Over Alternative Protocol", "tactic": "exfiltration" },
+    "T1567": { "name": "Exfiltration Over Web Service", "tactic": "exfiltration" },
+    "T1068": { "name": "Exploitation for Privilege Escalation", "tactic": "privilege-escalation" }
+  }
+}

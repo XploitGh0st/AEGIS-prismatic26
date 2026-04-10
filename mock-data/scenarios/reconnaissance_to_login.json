@@ -1,0 +1,67 @@
+{
+  "description": "Reconnaissance to login: port scan → service discovery → SSH brute force → login attempt",
+  "expected_incidents": 2,
+  "expected_severity": "high",
+  "expected_classification": "account_compromise",
+  "alerts": [
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "rl_001",
+      "event_time": "2026-04-09T08:00:00.000Z",
+      "payload": {
+        "event_type": "port_scan",
+        "timestamp": "2026-04-09T08:00:00.000Z",
+        "src_ip": "172.16.0.100",
+        "dst_ip": "10.0.1.0/24",
+        "sensor": "ids01",
+        "description": "Horizontal port scan across subnet"
+      }
+    },
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "rl_002",
+      "event_time": "2026-04-09T08:15:00.000Z",
+      "payload": {
+        "event_type": "ssh_brute_force",
+        "timestamp": "2026-04-09T08:15:00.000Z",
+        "src_ip": "172.16.0.100",
+        "dst_ip": "10.0.1.15",
+        "dst_port": 22,
+        "sensor": "ids01",
+        "description": "SSH brute force detected"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "rl_003",
+      "event_time": "2026-04-09T08:20:00.000Z",
+      "payload": {
+        "event_type": "failed_login",
+        "timestamp": "2026-04-09T08:20:00.000Z",
+        "src_ip": "172.16.0.100",
+        "dst_ip": "10.0.1.15",
+        "username": "admin",
+        "host": "app02.corp.local",
+        "description": "Multiple failed SSH logins from scanner IP"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "rl_004",
+      "event_time": "2026-04-09T08:25:00.000Z",
+      "payload": {
+        "event_type": "success_login",
+        "timestamp": "2026-04-09T08:25:00.000Z",
+        "src_ip": "172.16.0.100",
+        "dst_ip": "10.0.1.15",
+        "username": "admin",
+        "host": "app02.corp.local",
+        "description": "Successful login from previously scanning IP"
+      }
+    }
+  ]
+}

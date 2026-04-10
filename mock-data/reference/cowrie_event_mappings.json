@@ -1,0 +1,75 @@
+{
+  "cowrie.session.connect": {
+    "category": "network",
+    "event_name": "ssh_connection_attempt",
+    "mitre_technique_ids": ["T1046"],
+    "mitre_tactic": "reconnaissance",
+    "base_severity": "low",
+    "description": "SSH connection initiated to honeypot"
+  },
+  "cowrie.login.failed": {
+    "category": "authentication",
+    "event_name": "failed_login",
+    "mitre_technique_ids": ["T1110"],
+    "mitre_tactic": "credential-access",
+    "base_severity": "medium",
+    "description": "Failed SSH login attempt on honeypot"
+  },
+  "cowrie.login.success": {
+    "category": "authentication",
+    "event_name": "successful_login",
+    "mitre_technique_ids": ["T1078"],
+    "mitre_tactic": "initial-access",
+    "base_severity": "high",
+    "description": "Successful SSH login on honeypot"
+  },
+  "cowrie.command.input": {
+    "category": "execution",
+    "event_name": "command_execution",
+    "mitre_technique_ids": ["T1059"],
+    "mitre_tactic": "execution",
+    "base_severity": "high",
+    "description": "Command executed on honeypot",
+    "note": "Severity may be upgraded based on command risk analysis"
+  },
+  "cowrie.command.failed": {
+    "category": "execution",
+    "event_name": "command_execution_failed",
+    "mitre_technique_ids": ["T1059"],
+    "mitre_tactic": "execution",
+    "base_severity": "medium",
+    "description": "Failed command execution on honeypot"
+  },
+  "cowrie.session.file_download": {
+    "category": "execution",
+    "event_name": "file_download",
+    "mitre_technique_ids": ["T1105"],
+    "mitre_tactic": "command-and-control",
+    "base_severity": "critical",
+    "description": "File downloaded via honeypot session"
+  },
+  "cowrie.session.file_upload": {
+    "category": "execution",
+    "event_name": "file_upload",
+    "mitre_technique_ids": ["T1105"],
+    "mitre_tactic": "command-and-control",
+    "base_severity": "high",
+    "description": "File uploaded to honeypot"
+  },
+  "cowrie.direct-tcpip.request": {
+    "category": "network",
+    "event_name": "tunnel_request",
+    "mitre_technique_ids": ["T1572"],
+    "mitre_tactic": "command-and-control",
+    "base_severity": "high",
+    "description": "TCP tunnel request through honeypot"
+  },
+  "cowrie.client.version": {
+    "category": "network",
+    "event_name": "client_fingerprint",
+    "mitre_technique_ids": [],
+    "mitre_tactic": "reconnaissance",
+    "base_severity": "low",
+    "description": "SSH client version fingerprint captured"
+  }
+}

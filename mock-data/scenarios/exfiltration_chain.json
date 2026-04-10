@@ -1,0 +1,49 @@
+{
+  "description": "Exfiltration chain: suspicious DNS queries → large outbound transfer → C2 beacon",
+  "expected_incidents": 1,
+  "expected_severity": "high",
+  "expected_classification": "possible_exfiltration",
+  "alerts": [
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "ex_001",
+      "event_time": "2026-04-09T16:00:00.000Z",
+      "payload": {
+        "event_type": "dns_query_suspicious",
+        "timestamp": "2026-04-09T16:00:00.000Z",
+        "src_ip": "10.0.1.40",
+        "host": "db01.corp.local",
+        "description": "Unusual DNS query volume to rare TLD"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "ex_002",
+      "event_time": "2026-04-09T16:10:00.000Z",
+      "payload": {
+        "event_type": "data_exfiltration",
+        "timestamp": "2026-04-09T16:10:00.000Z",
+        "src_ip": "10.0.1.40",
+        "dst_ip": "198.51.100.200",
+        "host": "db01.corp.local",
+        "description": "Large outbound data transfer (2.3 GB) to external IP"
+      }
+    },
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "ex_003",
+      "event_time": "2026-04-09T16:15:00.000Z",
+      "payload": {
+        "event_type": "dns_tunnel",
+        "timestamp": "2026-04-09T16:15:00.000Z",
+        "src_ip": "10.0.1.40",
+        "dst_ip": "198.51.100.200",
+        "sensor": "ids01",
+        "description": "DNS tunneling activity detected from db01"
+      }
+    }
+  ]
+}

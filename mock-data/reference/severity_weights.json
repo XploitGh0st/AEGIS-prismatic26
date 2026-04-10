@@ -1,0 +1,32 @@
+{
+  "base_signal_scores": {
+    "account_compromise": 35,
+    "malware_execution": 30,
+    "privilege_escalation": 35,
+    "possible_exfiltration": 30,
+    "brute_force_attempt": 20,
+    "reconnaissance": 15
+  },
+  "bonuses": {
+    "privileged_identity": 10,
+    "multi_source_2": 8,
+    "multi_source_3": 12,
+    "execution": 10,
+    "privilege_escalation": 20,
+    "exfiltration": 15,
+    "attack_chain": 10,
+    "alert_volume_5": 5,
+    "alert_volume_10": 8,
+    "persistence": 5
+  },
+  "penalties": {
+    "duplicate_noise": -10,
+    "benign_context": -15
+  },
+  "severity_thresholds": {
+    "low": [0, 24],
+    "medium": [25, 49],
+    "high": [50, 74],
+    "critical": [75, 100]
+  }
+}

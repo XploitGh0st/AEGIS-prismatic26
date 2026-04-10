@@ -1,0 +1,10 @@
+{
+  "assets": [
+    { "hostname": "dc01.corp.local", "type": "domain_controller", "criticality": "critical" },
+    { "hostname": "db01.corp.local", "type": "database_server", "criticality": "critical" },
+    { "hostname": "web01.corp.local", "type": "web_server", "criticality": "high" },
+    { "hostname": "app02.corp.local", "type": "application_server", "criticality": "high" },
+    { "hostname": "svr04", "type": "honeypot", "criticality": "medium", "note": "Cowrie SSH honeypot" },
+    { "hostname": "workstation01", "type": "endpoint", "criticality": "low" }
+  ]
+}

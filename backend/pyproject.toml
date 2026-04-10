@@ -1,0 +1,73 @@
+[project]
+name = "aegis-backend"
+version = "0.1.0"
+description = "AEGIS — Cybersecurity Incident Triage Backend"
+requires-python = ">=3.11"
+dependencies = [
+    # FastAPI + server
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "python-multipart>=0.0.18",
+
+    # Database
+    "sqlalchemy[asyncio]>=2.0.36",
+    "psycopg[binary]>=3.2.4",
+    "alembic>=1.14.0",
+    "asyncpg>=0.30.0",
+
+    # Redis
+    "redis>=5.2.0",
+
+    # OpenSearch
+    "opensearch-py>=2.8.0",
+
+    # Pydantic
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+
+    # HTTP
+    "httpx>=0.28.0",
+
+    # OpenAI
+    "openai>=1.58.0",
+
+    # Utilities
+    "python-dateutil>=2.9.0",
+    "python-dotenv>=1.0.1",
+    "structlog>=24.4.0",
+    "orjson>=3.10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.0",
+    "ruff>=0.8.0",
+]
+mempalace = [
+    "mempalace>=0.1.0",
+    "chromadb>=0.5.0",
+]
+splunk = [
+    "paramiko>=3.5.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["app/tests"]
