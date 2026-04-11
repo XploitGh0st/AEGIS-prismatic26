@@ -1,13 +1,14 @@
 """
 Classification Service — determines the incident type based on alert composition.
 
-6 incident types in precedence order:
-1. account_compromise — failed login burst + success + post-auth activity
-2. malware_execution — suspicious process tree, encoded commands, malicious hash
-3. privilege_escalation — admin group change, token elevation
-4. possible_exfiltration — outbound spike, suspicious external transfer
-5. brute_force_attempt — repeated failed logins, no success
-6. reconnaissance — port scan, service probing
+7 incident types in precedence order:
+1. cve_exploitation — active exploitation of public-facing apps, java deserialization
+2. account_compromise — failed login burst + success + post-auth activity
+3. malware_execution — suspicious process tree, encoded commands, malicious hash
+4. privilege_escalation — admin group change, token elevation
+5. possible_exfiltration — outbound spike, suspicious external transfer
+6. brute_force_attempt — repeated failed logins, no success
+7. reconnaissance — port scan, service probing
 """
 
 from __future__ import annotations
@@ -26,11 +27,19 @@ def classify_incident(incident: "Incident") -> str:
     techniques = set(incident.mitre_techniques or [])
     tactics = set(incident.mitre_tactics or [])
 
+    # ── 0. CVE Exploitation (Highest Precedence) ─────────
+    # Public-Facing App Exploit (T1190) or Client Exploit (T1203)
+    has_exploit = bool(techniques & {"T1190", "T1203", "T1659"})
+    has_execution = bool(techniques & {"T1059", "T1204", "T1053"})
+    has_c2 = "T1071" in techniques or "T1573" in techniques
+    
+    if has_exploit and (has_execution or has_c2):
+        return "cve_exploitation"
+
     # ── 1. Account Compromise ────────────────────────────
     # Brute force (T1110) + Valid Accounts (T1078) + execution
     has_brute = "T1110" in techniques
     has_valid_accounts = "T1078" in techniques
-    has_execution = bool(techniques & {"T1059", "T1204", "T1053"})
     has_file_transfer = "T1105" in techniques
 
     if has_valid_accounts and (has_brute or has_execution or has_file_transfer):
@@ -71,3 +80,4 @@ def classify_incident(incident: "Incident") -> str:
         return "reconnaissance"
 
     return "reconnaissance"
+

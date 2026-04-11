@@ -29,6 +29,7 @@ class SIEMAdapter(BaseAdapter):
         "firewall_block": ("network", "firewall_block", [], "defense-evasion", "low"),
         "data_exfiltration": ("network", "data_exfiltration", ["T1041"], "exfiltration", "critical"),
         "dns_query_suspicious": ("network", "dns_query_suspicious", ["T1071"], "command-and-control", "medium"),
+        "dns_tunnel": ("network", "dns_tunnel_detected", ["T1071", "T1048"], "exfiltration", "high"),
     }
 
     def normalize(self, raw_payload: dict[str, Any]) -> CanonicalAlert:

@@ -210,6 +210,7 @@ def _generate_deterministic_summary(rca_bundle: dict) -> dict:
     host_str = hosts[0] if hosts else "unknown host"
 
     class_labels = {
+        "cve_exploitation": "CVE exploitation attack",
         "account_compromise": "account compromise",
         "malware_execution": "malware execution",
         "brute_force_attempt": "brute force attack",

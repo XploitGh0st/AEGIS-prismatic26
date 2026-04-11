@@ -303,18 +303,25 @@ export default function PcapUploadPage() {
       {/* Info Panel */}
       <div className="pcap-reveal rounded-2xl border border-white/10 bg-white/[0.04] p-5">
         <h3 className="panel-title">Analysis Capabilities</h3>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {[
+            { title: "CVE Exploit Detection", desc: "Log4Shell, Java deserialization, JNDI injection signatures" },
+            { title: "C2 Beacon Analysis", desc: "Periodic callback detection, rotating session analysis" },
+            { title: "LDAP/RMI Attack Detection", desc: "Malicious naming service callbacks, gadget chain delivery" },
             { title: "Port Scan Detection", desc: "SYN scans, connect scans, stealth scanning patterns" },
             { title: "SSH Brute Force", desc: "Automated credential guessing attack detection" },
             { title: "DNS Analysis", desc: "DGA domains, DNS tunneling, anomalous queries" },
             { title: "Payload Inspection", desc: "Shell commands, encoded payloads, malware indicators" },
             { title: "HTTP Attack Signatures", desc: "Path traversal, SQL injection, XSS patterns" },
             { title: "Data Exfiltration", desc: "Unusual outbound transfer volume detection" },
-          ].map((cap) => (
-            <div key={cap.title} className="rounded-xl border border-white/10 bg-black/20 p-3">
-              <p className="text-sm font-medium text-white">{cap.title}</p>
-              <p className="mt-1 text-xs text-slate-400">{cap.desc}</p>
+          ].map((cap, i) => (
+            <div key={i} className={`rounded-xl border p-3 ${
+              i < 3 
+                ? 'border-aegis-pink/30 bg-aegis-pink/5 text-aegis-pink' 
+                : 'border-white/10 bg-black/20 text-white'
+            }`}>
+              <p className="text-sm font-medium text-inherit">{cap.title}</p>
+              <p className={`mt-1 text-xs ${i < 3 ? 'text-aegis-pink/70' : 'text-slate-400'}`}>{cap.desc}</p>
             </div>
           ))}
         </div>

@@ -262,6 +262,11 @@ def _build_facts(incident: Incident, alerts: list[NormalizedAlert]) -> list[str]
 def _build_root_cause(incident: Incident, alerts: list[NormalizedAlert]) -> str:
     """Build a deterministic root cause hypothesis."""
     templates = {
+        "cve_exploitation": (
+            "Active exploitation of a known CVE vulnerability detected. "
+            "Attacker delivered exploit payload targeting a public-facing application, "
+            "achieved code execution, and established command-and-control connectivity."
+        ),
         "account_compromise": (
             "Credential brute-force attack followed by successful login "
             "and post-authentication activity. Attacker likely used automated "

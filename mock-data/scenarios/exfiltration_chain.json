@@ -1,26 +1,78 @@
 {
-  "description": "Exfiltration chain: suspicious DNS queries → large outbound transfer → C2 beacon",
+  "description": "Full exfiltration chain with credential access: failed login burst → successful login → data staging (database dump) → suspicious DNS queries → large outbound transfer → DNS tunneling exfil. Single attacker compromises db01 and exfiltrates data.",
   "expected_incidents": 1,
-  "expected_severity": "high",
+  "expected_severity": "critical",
   "expected_classification": "possible_exfiltration",
+  "correlation_notes": {
+    "chain_1": {
+      "alerts": ["ex_001", "ex_002", "ex_003", "ex_004", "ex_005", "ex_006"],
+      "correlation_signals": ["same_host:db01.corp.local", "same_source_ip:10.0.1.40", "time_within_15m", "mitre_chain:T1110→T1078→T1059→T1071→T1041→T1048"],
+      "expected_classification": "possible_exfiltration"
+    }
+  },
   "alerts": [
     {
       "source_family": "siem",
       "source_type": "splunk_mock",
       "external_alert_id": "ex_001",
-      "event_time": "2026-04-09T16:00:00.000Z",
+      "event_time": "2026-04-09T15:45:00.000Z",
       "payload": {
-        "event_type": "dns_query_suspicious",
-        "timestamp": "2026-04-09T16:00:00.000Z",
+        "event_type": "failed_login",
+        "timestamp": "2026-04-09T15:45:00.000Z",
         "src_ip": "10.0.1.40",
+        "dst_ip": "10.0.1.40",
+        "username": "db_admin",
         "host": "db01.corp.local",
-        "description": "Unusual DNS query volume to rare TLD"
+        "description": "6 failed login attempts for db_admin via local console — possible lateral movement"
       }
     },
     {
       "source_family": "siem",
       "source_type": "splunk_mock",
       "external_alert_id": "ex_002",
+      "event_time": "2026-04-09T15:50:00.000Z",
+      "payload": {
+        "event_type": "success_login",
+        "timestamp": "2026-04-09T15:50:00.000Z",
+        "src_ip": "10.0.1.40",
+        "dst_ip": "10.0.1.40",
+        "username": "db_admin",
+        "host": "db01.corp.local",
+        "description": "Successful login as db_admin after brute force — attacker now has database access"
+      }
+    },
+    {
+      "source_family": "edr",
+      "source_type": "crowdstrike_mock",
+      "external_alert_id": "ex_003",
+      "event_time": "2026-04-09T15:55:00.000Z",
+      "payload": {
+        "event_type": "process_created",
+        "timestamp": "2026-04-09T15:55:00.000Z",
+        "user": "db_admin",
+        "host": "db01.corp.local",
+        "process_name": "mysqldump",
+        "command_line": "mysqldump --all-databases --single-transaction > /tmp/.cache/full_dump.sql",
+        "description": "Full database dump to hidden temp directory — data staging for exfiltration"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "ex_004",
+      "event_time": "2026-04-09T16:00:00.000Z",
+      "payload": {
+        "event_type": "dns_query_suspicious",
+        "timestamp": "2026-04-09T16:00:00.000Z",
+        "src_ip": "10.0.1.40",
+        "host": "db01.corp.local",
+        "description": "147 DNS queries to data-7f3a2b.exfil-drop.xyz in 60 seconds — DNS tunneling indicator"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "ex_005",
       "event_time": "2026-04-09T16:10:00.000Z",
       "payload": {
         "event_type": "data_exfiltration",
@@ -28,13 +80,13 @@
         "src_ip": "10.0.1.40",
         "dst_ip": "198.51.100.200",
         "host": "db01.corp.local",
-        "description": "Large outbound data transfer (2.3 GB) to external IP"
+        "description": "Large outbound data transfer: 2.3 GB from db01 to external IP 198.51.100.200 over HTTPS"
       }
     },
     {
       "source_family": "ids",
       "source_type": "suricata_mock",
-      "external_alert_id": "ex_003",
+      "external_alert_id": "ex_006",
       "event_time": "2026-04-09T16:15:00.000Z",
       "payload": {
         "event_type": "dns_tunnel",
@@ -42,7 +94,7 @@
         "src_ip": "10.0.1.40",
         "dst_ip": "198.51.100.200",
         "sensor": "ids01",
-        "description": "DNS tunneling activity detected from db01"
+        "description": "Confirmed DNS tunneling: encoded SQL data fragments detected in DNS TXT queries from db01"
       }
     }
   ]

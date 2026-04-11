@@ -1,6 +1,9 @@
 """
 PCAP API — upload PCAP files for automated threat analysis.
 
+Full pipeline: Upload → Parse → Normalize → Correlate → Score → Classify → AI Summary
+Each PCAP upload produces correlated incidents with Mistral AI-generated investigation summaries.
+
 Endpoints:
 - POST /api/v1/pcap/upload — upload a .pcap/.pcapng file
 """
@@ -9,17 +12,18 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db_session
 from app.core.logging import get_logger
 from app.services.pcap_service import analyze_pcap, save_uploaded_pcap
 from app.models.raw_alert import RawAlert
-from app.models.normalized_alert import NormalizedAlert
+from app.models.incident import Incident
 from app.services.normalization_service import normalize_raw_alert
 from app.services.correlation_service import correlate_alert
-from app.utils.datetime import parse_iso
+from app.services.summary_service import generate_summary
 
 log = get_logger("pcap_api")
 router = APIRouter(prefix="/pcap", tags=["pcap"])
@@ -32,6 +36,8 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 async def upload_pcap(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_db_session),
+    auto_summarize: bool = Query(True, description="Auto-generate AI summaries for all created incidents"),
+    generation_type: str = Query("ai_generated", description="Summary type: ai_generated or deterministic"),
 ):
     """
     Upload a PCAP file for automated threat analysis.
@@ -42,10 +48,17 @@ async def upload_pcap(
     - DNS anomalies (DGA, tunneling)
     - Suspicious payload patterns
     - HTTP attack signatures
+    - JNDI injection (Log4Shell / CVE-2021-44228)
+    - Java deserialization attacks
+    - C2 beaconing detection
+    - CVE signature matching
     - Data exfiltration indicators
 
     Each finding is converted to an alert and processed through the
     full AEGIS pipeline: Normalize → Correlate → Score → Classify.
+
+    If auto_summarize=true (default), Mistral AI generates investigation
+    summaries for every correlated incident automatically.
     """
     # Validate filename
     if not file.filename:
@@ -82,17 +95,17 @@ async def upload_pcap(
             "status": "complete",
             "alerts_generated": 0,
             "incidents_created": [],
+            "incidents_summarized": 0,
             "message": "No security-relevant findings in the PCAP file",
         }
 
-    # Feed each alert through the AEGIS pipeline directly
-    # (bypass the standard ingest to avoid queue/dedup issues)
+    # ── Phase 1: Feed each alert through Normalize → Correlate ────────
     incident_ids = set()
     alert_count = 0
 
     for canonical in canonical_alerts:
         try:
-            # Create raw alert directly with unique ID
+            # Create raw alert directly
             raw_id = uuid.uuid4()
             event_time = canonical.event_time
 
@@ -118,7 +131,6 @@ async def upload_pcap(
                 "pcap_id": pcap_id,
             }
 
-            # Create raw alert with unique external_alert_id
             raw_alert = RawAlert(
                 id=raw_id,
                 source_family=canonical.source_family,
@@ -136,7 +148,7 @@ async def upload_pcap(
             if normalized:
                 await session.flush()
 
-                # Correlate
+                # Correlate → Score → Classify
                 incident = await correlate_alert(session, str(normalized.id))
                 await session.flush()
                 incident_ids.add(str(incident.id))
@@ -145,26 +157,89 @@ async def upload_pcap(
 
         except Exception as e:
             log.error("pcap_alert_pipeline_error", error=str(e), alert_index=alert_count)
-            # Rollback just this alert's partial work
             try:
                 await session.rollback()
             except Exception:
                 pass
             continue
 
+    # ── Phase 2: Auto-generate AI summaries for each incident ─────────
+    summaries_generated = 0
+    summary_errors = []
+    incident_details = []
+
+    if auto_summarize and incident_ids:
+        for inc_id in incident_ids:
+            try:
+                result = await session.execute(
+                    select(Incident).where(Incident.id == uuid.UUID(inc_id))
+                )
+                incident = result.scalar_one_or_none()
+                if incident is None:
+                    continue
+
+                # Generate summary (AI or deterministic based on config)
+                summary = await generate_summary(
+                    session, incident,
+                    force_regenerate=True,
+                    generation_type=generation_type,
+                )
+                await session.flush()
+                summaries_generated += 1
+
+                incident_details.append({
+                    "incident_id": inc_id,
+                    "incident_number": incident.incident_number,
+                    "title": incident.title,
+                    "classification": incident.classification,
+                    "severity": incident.severity,
+                    "severity_score": incident.severity_score,
+                    "alert_count": incident.alert_count,
+                    "mitre_techniques": incident.mitre_techniques or [],
+                    "summary_type": summary.generation_type,
+                    "executive_summary": summary.executive_summary,
+                    "root_cause": summary.root_cause,
+                    "model_used": summary.model_used,
+                })
+
+                log.info(
+                    "pcap_incident_summarized",
+                    incident_id=inc_id,
+                    incident_number=incident.incident_number,
+                    classification=incident.classification,
+                    severity=incident.severity,
+                    summary_type=summary.generation_type,
+                )
+
+            except Exception as e:
+                log.error("pcap_summary_error", incident_id=inc_id, error=str(e))
+                summary_errors.append({"incident_id": inc_id, "error": str(e)})
+
     log.info(
         "pcap_upload_complete",
         pcap_id=pcap_id,
         alerts=alert_count,
         incidents=len(incident_ids),
+        summaries=summaries_generated,
     )
 
-    return {
+    response = {
         "pcap_id": pcap_id,
         "filename": file.filename,
         "file_size_bytes": len(content),
         "status": "complete",
         "alerts_generated": alert_count,
         "incidents_created": list(incident_ids),
-        "message": f"PCAP analyzed: {alert_count} alerts generated, {len(incident_ids)} incident(s) created/updated",
+        "incidents_summarized": summaries_generated,
+        "incidents": incident_details,
+        "message": (
+            f"PCAP analyzed: {alert_count} alerts extracted, "
+            f"{len(incident_ids)} incident(s) correlated, "
+            f"{summaries_generated} AI summary(ies) generated"
+        ),
     }
+
+    if summary_errors:
+        response["summary_errors"] = summary_errors
+
+    return response

@@ -24,6 +24,8 @@ class EDRAdapter(BaseAdapter):
         "privilege_escalation": ("endpoint", "privilege_escalation", ["T1548", "T1134"], "privilege-escalation", "critical"),
         "lateral_movement": ("network", "lateral_movement_attempt", ["T1021"], "lateral-movement", "high"),
         "persistence_created": ("endpoint", "persistence_created", ["T1543", "T1547"], "persistence", "high"),
+        "persistence_crontab": ("endpoint", "persistence_crontab", ["T1543"], "persistence", "high"),
+        "persistence_service": ("endpoint", "persistence_service", ["T1543", "T1547"], "persistence", "high"),
         "credential_dump": ("endpoint", "credential_dump", ["T1003"], "credential-access", "critical"),
         "encoded_command": ("execution", "encoded_command_execution", ["T1059", "T1027"], "execution", "high"),
         "dll_injection": ("execution", "dll_injection", ["T1055"], "defense-evasion", "critical"),

@@ -26,6 +26,9 @@ class IDSAdapter(BaseAdapter):
         "ssh_brute_force": ("authentication", "ssh_brute_force", ["T1110"], "credential-access", "high"),
         "outbound_c2": ("network", "outbound_c2_beacon", ["T1071", "T1573"], "command-and-control", "critical"),
         "exploit_attempt": ("network", "exploit_attempt", ["T1190"], "initial-access", "critical"),
+        "web_exploit": ("execution", "web_exploit_attempt", ["T1190"], "initial-access", "high"),
+        "suspicious_download": ("execution", "suspicious_download", ["T1105"], "command-and-control", "high"),
+        "service_probe": ("network", "service_probe", ["T1046"], "reconnaissance", "low"),
         "protocol_anomaly": ("network", "protocol_anomaly", [], "defense-evasion", "low"),
     }
 

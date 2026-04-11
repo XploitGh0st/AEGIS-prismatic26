@@ -2,10 +2,11 @@
 Scoring Service — computes additive severity scores for incidents.
 
 Score formula:
-    base_signal_score (15–35)
+    base_signal_score (15–40)
     + asset_criticality_bonus (+10/+15)
     + privileged_identity_bonus (+10)
     + multi_source_bonus (+8/+12)
+    + exploitation_bonus (+15)
     + execution_bonus (+10)
     + privilege_escalation_bonus (+20)
     + exfiltration_bonus (+15)
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 
 
 # MITRE technique sets for category bonuses
+EXPLOITATION_TECHNIQUES = {"T1190", "T1203", "T1659"}
 EXECUTION_TECHNIQUES = {"T1059", "T1204", "T1053", "T1072"}
 PRIVESC_TECHNIQUES = {"T1548", "T1134", "T1055", "T1068"}
 EXFIL_TECHNIQUES = {"T1041", "T1048", "T1567"}
@@ -33,6 +35,7 @@ PERSISTENCE_TECHNIQUES = {"T1543", "T1547", "T1078"}
 
 # Attack chain sequences (technique lists)
 ATTACK_CHAINS = [
+    ["T1190", "T1071", "T1203", "T1059"],  # Exploit -> C2 -> Deser -> Exec
     ["T1046", "T1110", "T1078", "T1059", "T1105"],
     ["T1110", "T1078", "T1059"],
     ["T1078", "T1059", "T1105"],
@@ -53,7 +56,7 @@ def compute_severity_score(incident: "Incident") -> int:
     techniques = set(incident.mitre_techniques or [])
     tactics = set(incident.mitre_tactics or [])
 
-    # ── Base signal score (15–35) ────────────────────────
+    # ── Base signal score (15–40) ────────────────────────
     base = _base_score(incident.classification)
     score += base
     breakdown["base_signal"] = base
@@ -71,6 +74,11 @@ def compute_severity_score(incident: "Incident") -> int:
     elif len(families) >= 2:
         score += 8
         breakdown["multi_source"] = 8
+
+    # ── Exploitation bonus (+15) ─────────────────────────
+    if techniques & EXPLOITATION_TECHNIQUES:
+        score += 15
+        breakdown["exploitation"] = 15
 
     # ── Execution bonus (+10) ────────────────────────────
     if techniques & EXECUTION_TECHNIQUES:
@@ -132,6 +140,7 @@ def severity_label(score: int) -> str:
 def _base_score(classification: str) -> int:
     """Base score by incident classification."""
     base_scores = {
+        "cve_exploitation": 40,
         "account_compromise": 35,
         "malware_execution": 30,
         "privilege_escalation": 35,

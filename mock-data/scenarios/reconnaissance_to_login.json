@@ -1,8 +1,20 @@
 {
-  "description": "Reconnaissance to login: port scan → service discovery → SSH brute force → login attempt",
+  "description": "Two-attacker reconnaissance scenario. Attacker A (172.16.0.100): port scan → SSH brute force detection → failed logins → successful login. Attacker B (198.51.100.77): separate port scan only. Expected: 2 incidents — one account_compromise chain, one standalone reconnaissance.",
   "expected_incidents": 2,
   "expected_severity": "high",
   "expected_classification": "account_compromise",
+  "correlation_notes": {
+    "chain_1": {
+      "alerts": ["rl_001", "rl_002", "rl_003", "rl_004"],
+      "correlation_signals": ["same_source_ip:172.16.0.100", "time_within_15m", "mitre_chain:T1046→T1110→T1078", "same_destination_ip:10.0.1.15"],
+      "expected_classification": "account_compromise"
+    },
+    "chain_2": {
+      "alerts": ["rl_005", "rl_006", "rl_007"],
+      "correlation_signals": ["same_source_ip:198.51.100.77", "time_within_5m", "same_mitre:T1046"],
+      "expected_classification": "reconnaissance"
+    }
+  },
   "alerts": [
     {
       "source_family": "ids",
@@ -15,7 +27,7 @@
         "src_ip": "172.16.0.100",
         "dst_ip": "10.0.1.0/24",
         "sensor": "ids01",
-        "description": "Horizontal port scan across subnet"
+        "description": "Horizontal port scan: 47 ports probed across 10.0.1.0/24 subnet in 30 seconds"
       }
     },
     {
@@ -30,7 +42,7 @@
         "dst_ip": "10.0.1.15",
         "dst_port": 22,
         "sensor": "ids01",
-        "description": "SSH brute force detected"
+        "description": "SSH brute force detected — 34 connection attempts in 60 seconds targeting app02"
       }
     },
     {
@@ -45,7 +57,7 @@
         "dst_ip": "10.0.1.15",
         "username": "admin",
         "host": "app02.corp.local",
-        "description": "Multiple failed SSH logins from scanner IP"
+        "description": "8 failed SSH login attempts from scanner IP using common credential pairs"
       }
     },
     {
@@ -60,7 +72,51 @@
         "dst_ip": "10.0.1.15",
         "username": "admin",
         "host": "app02.corp.local",
-        "description": "Successful login from previously scanning IP"
+        "description": "Successful SSH login from previously-scanning IP — attacker gained access"
+      }
+    },
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "rl_005",
+      "event_time": "2026-04-09T08:05:00.000Z",
+      "payload": {
+        "event_type": "port_scan",
+        "timestamp": "2026-04-09T08:05:00.000Z",
+        "src_ip": "198.51.100.77",
+        "dst_ip": "10.0.2.0/24",
+        "sensor": "ids02",
+        "description": "Horizontal port scan from unrelated external IP targeting DMZ subnet"
+      }
+    },
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "rl_006",
+      "event_time": "2026-04-09T08:07:00.000Z",
+      "payload": {
+        "event_type": "service_probe",
+        "timestamp": "2026-04-09T08:07:00.000Z",
+        "src_ip": "198.51.100.77",
+        "dst_ip": "10.0.2.15",
+        "dst_port": 8080,
+        "sensor": "ids02",
+        "description": "HTTP service probe — banner grab on Tomcat 9.0.50"
+      }
+    },
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "rl_007",
+      "event_time": "2026-04-09T08:09:00.000Z",
+      "payload": {
+        "event_type": "service_probe",
+        "timestamp": "2026-04-09T08:09:00.000Z",
+        "src_ip": "198.51.100.77",
+        "dst_ip": "10.0.2.20",
+        "dst_port": 3306,
+        "sensor": "ids02",
+        "description": "MySQL service probe — connection attempt from external scanner"
       }
     }
   ]

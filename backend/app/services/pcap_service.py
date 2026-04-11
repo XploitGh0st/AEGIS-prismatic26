@@ -12,12 +12,18 @@ Capabilities:
 - HTTP request inspection (suspicious URIs, downloads)
 - Payload anomaly detection (encoded commands, shell patterns)
 - Traffic volume analysis
+- JNDI injection detection (Log4Shell / CVE-2021-44228)
+- Malicious LDAP/RMI server callback detection
+- Java deserialization attack detection
+- C2 beaconing detection
+- CVE signature matching engine
 """
 
 from __future__ import annotations
 
 import hashlib
 import os
+import re
 import uuid
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -41,6 +47,11 @@ SUSPICIOUS_PAYLOAD_PATTERNS = [
     b"powershell", b"cmd.exe",
     b"<script", b"javascript:",
     b"rm -rf", b"dd if=",
+    # Java / JNDI / Exploit-specific patterns
+    b"${jndi:", b"${lower:", b"${upper:",
+    b"javax.naming", b"java.lang.Runtime",
+    b"getRuntime", b"ProcessBuilder",
+    b"java.io.ObjectInputStream",
 ]
 
 SUSPICIOUS_DNS_TLDS = {
@@ -53,6 +64,81 @@ COMMON_SCAN_PORTS = {
     443, 445, 993, 995, 1433, 1521, 3306, 3389, 5432,
     5900, 6379, 8080, 8443, 9200, 27017,
 }
+
+# ── Java serialization magic bytes ──────────────────────
+JAVA_SERIAL_MAGIC = b"\xac\xed\x00\x05"
+
+# ── Known malicious Java gadget classes ─────────────────
+JAVA_GADGET_CLASSES = [
+    b"org.apache.naming.ResourceRef",
+    b"org.apache.naming.AbstractRef",
+    b"javax.naming.Reference",
+    b"javax.naming.StringRefAddr",
+    b"com.sun.jndi.rmi",
+    b"java.lang.Runtime",
+    b"java.lang.ProcessBuilder",
+    b"org.apache.xalan",
+    b"org.apache.commons.collections",
+    b"sun.reflect.annotation",
+    b"com.sun.rowset.JdbcRowSetImpl",
+    b"org.springframework.beans.factory",
+    b"bsh.Interpreter",
+]
+
+# ── JNDI injection patterns (including obfuscated) ─────
+JNDI_PATTERNS = [
+    # Standard
+    rb'\$\{jndi:',
+    # Case-obfuscated variants
+    rb'\$\{\$\{[^}]*\}ndi:',
+    rb'\$\{j\$\{[^}]*\}di:',
+    rb'\$\{jn\$\{[^}]*\}i:',
+    rb'\$\{jnd\$\{[^}]*\}:',
+    # Lookup obfuscation
+    rb'\$\{\$\{(?:lower|upper|env|sys|java):',
+    # Unicode / encoding tricks
+    rb'\$\{j(?:\$\{[^}]+\})*n(?:\$\{[^}]+\})*d(?:\$\{[^}]+\})*i(?:\$\{[^}]+\})*:',
+]
+
+# ── CVE signature definitions ──────────────────────────
+CVE_SIGNATURES: list[dict[str, Any]] = [
+    {
+        "cve_id": "CVE-2021-44228",
+        "name": "Apache Log4Shell RCE",
+        "description": "Log4j2 JNDI injection leading to remote code execution",
+        "payload_patterns": [rb'\$\{jndi:', rb'\$\{j\$\{', rb'jndi:ldap://', rb'jndi:rmi://'],
+        "response_indicators": [b"log4j", b"Log4j2", b"com.sun.jndi"],
+        "associated_ports": {1389, 1099, 8888, 9999},
+        "mitre_techniques": ["T1190", "T1203", "T1059"],
+        "severity": "critical",
+        "confidence": 0.95,
+    },
+    {
+        "cve_id": "CVE-2021-45046",
+        "name": "Log4Shell Bypass (Thread Context)",
+        "description": "Log4j2 incomplete fix bypass via Thread Context patterns",
+        "payload_patterns": [rb'\$\{ctx:', rb'\$\{jndi:'],
+        "response_indicators": [b"log4j", b"Log4j2"],
+        "associated_ports": {1389, 1099},
+        "mitre_techniques": ["T1190", "T1203"],
+        "severity": "critical",
+        "confidence": 0.90,
+    },
+    {
+        "cve_id": "CVE-2017-5638",
+        "name": "Apache Struts2 RCE",
+        "description": "OGNL injection via Content-Type header",
+        "payload_patterns": [rb'%\{.*\}', rb'ognl\.OgnlContext'],
+        "response_indicators": [b"struts", b"ognl"],
+        "associated_ports": set(),
+        "mitre_techniques": ["T1190"],
+        "severity": "critical",
+        "confidence": 0.85,
+    },
+]
+
+# ── Non-standard ports for naming services ──────────────
+NAMING_SERVICE_PORTS = {389, 636, 1389, 1099, 8888, 9999, 10389}
 
 
 def _ensure_upload_dir() -> Path:
@@ -85,7 +171,12 @@ def analyze_pcap(file_path: str) -> list[CanonicalAlert]:
     5. Inspect payloads for suspicious content
     6. Detect SSH brute force patterns
     7. Analyze HTTP traffic
-    8. Generate alerts for each finding
+    8. Detect JNDI injection attacks (Log4Shell)
+    9. Detect malicious LDAP/RMI callbacks
+    10. Detect Java deserialization attacks
+    11. Detect C2 beaconing patterns
+    12. Match CVE signatures
+    13. Generate alerts for each finding
     """
     try:
         # Import scapy here to avoid startup cost
@@ -113,6 +204,13 @@ def analyze_pcap(file_path: str) -> list[CanonicalAlert]:
     ssh_attempts: dict[str, list] = defaultdict(list)  # src_ip → list of timestamps
     http_requests: list[dict] = []
     suspicious_payloads: list[dict] = []
+
+    # New: exploit-specific data collection
+    jndi_injections: list[dict] = []
+    ldap_rmi_callbacks: list[dict] = []
+    java_deser_attacks: list[dict] = []
+    http_beacons: dict[str, list[dict]] = defaultdict(list)  # dst_key → list of requests
+    cve_matches: list[dict] = []
 
     # Per-IP traffic stats
     ip_bytes_sent: dict[str, int] = Counter()
@@ -156,28 +254,155 @@ def analyze_pcap(file_path: str) -> list[CanonicalAlert]:
             if tcp.dport == 22 and tcp.flags & 0x02:  # SYN flag
                 ssh_attempts[src_ip].append(pkt_time)
 
-            # HTTP traffic
-            if tcp.dport in (80, 8080, 8443) or tcp.sport in (80, 8080, 8443):
+            # HTTP traffic (expanded port list)
+            if tcp.dport in (80, 443, 8080, 8443, 8888) or tcp.sport in (80, 443, 8080, 8443, 8888):
                 if pkt.haslayer(Raw):
                     payload = pkt[Raw].load
                     if payload.startswith(b"GET ") or payload.startswith(b"POST ") or payload.startswith(b"PUT "):
                         try:
-                            first_line = payload.split(b"\r\n")[0].decode("utf-8", errors="replace")
-                            http_requests.append({
+                            lines = payload.split(b"\r\n")
+                            first_line = lines[0].decode("utf-8", errors="replace")
+
+                            # Extract headers for deeper inspection
+                            headers = {}
+                            for line in lines[1:]:
+                                if b":" in line:
+                                    k, _, v = line.partition(b":")
+                                    headers[k.decode("utf-8", errors="replace").strip().lower()] = \
+                                        v.decode("utf-8", errors="replace").strip()
+
+                            req_info = {
                                 "time": pkt_time,
                                 "src_ip": src_ip,
                                 "dst_ip": dst_ip,
+                                "src_port": tcp.sport,
+                                "dst_port": tcp.dport,
                                 "request": first_line,
+                                "headers": headers,
                                 "size": len(payload),
-                            })
+                                "raw_payload": payload,
+                            }
+                            http_requests.append(req_info)
+
+                            # Track beaconing — group by destination
+                            beacon_key = f"{dst_ip}:{tcp.dport}"
+                            http_beacons[beacon_key].append(req_info)
+
                         except Exception:
                             pass
 
-            # Payload inspection
+            # ── JNDI injection detection ─────────────────
             if pkt.haslayer(Raw):
+                payload = pkt[Raw].load
+                payload_lower = payload.lower()
+
+                for pattern in JNDI_PATTERNS:
+                    match = re.search(pattern, payload, re.IGNORECASE)
+                    if match:
+                        # Extract the full JNDI string
+                        start = match.start()
+                        # Find the matching closing brace
+                        jndi_str = _extract_jndi_string(payload[start:])
+
+                        # Determine which field contains the injection
+                        injection_field = _identify_injection_field(payload, start)
+
+                        # Extract callback URL
+                        callback_url = _extract_callback_url(jndi_str)
+                        callback_protocol = _extract_callback_protocol(jndi_str)
+
+                        jndi_injections.append({
+                            "time": pkt_time,
+                            "src_ip": src_ip,
+                            "dst_ip": dst_ip,
+                            "src_port": tcp.sport,
+                            "dst_port": tcp.dport,
+                            "jndi_string": jndi_str,
+                            "callback_url": callback_url,
+                            "callback_protocol": callback_protocol,
+                            "injection_field": injection_field,
+                            "payload_preview": payload[:500].decode("utf-8", errors="replace"),
+                        })
+                        break  # One detection per packet
+
+                # ── LDAP/RMI callback detection ──────────
+                if tcp.dport in NAMING_SERVICE_PORTS or tcp.sport in NAMING_SERVICE_PORTS:
+                    # Check if this is a naming service response (not just SYN/ACK)
+                    if len(payload) > 10:
+                        is_response = tcp.sport in NAMING_SERVICE_PORTS
+                        ldap_rmi_callbacks.append({
+                            "time": pkt_time,
+                            "src_ip": src_ip,
+                            "dst_ip": dst_ip,
+                            "src_port": tcp.sport,
+                            "dst_port": tcp.dport,
+                            "direction": "response" if is_response else "request",
+                            "service_port": tcp.sport if is_response else tcp.dport,
+                            "payload_size": len(payload),
+                            "has_java_serial": JAVA_SERIAL_MAGIC in payload,
+                            "payload_preview": payload[:200].decode("utf-8", errors="replace"),
+                        })
+
+                # ── Java deserialization detection ────────
+                if JAVA_SERIAL_MAGIC in payload:
+                    # Extract class names from the serialized stream
+                    classes = _extract_java_classes(payload)
+                    gadget_hits = [c for c in classes if any(g in c.encode() for g in JAVA_GADGET_CLASSES)]
+
+                    java_deser_attacks.append({
+                        "time": pkt_time,
+                        "src_ip": src_ip,
+                        "dst_ip": dst_ip,
+                        "src_port": tcp.sport,
+                        "dst_port": tcp.dport,
+                        "classes_found": classes[:20],
+                        "gadget_chains": gadget_hits,
+                        "payload_size": len(payload),
+                        "serial_offset": payload.find(JAVA_SERIAL_MAGIC),
+                    })
+
+            # ── CVE signature matching ───────────────────
+            if pkt.haslayer(Raw):
+                payload = pkt[Raw].load
+                for sig in CVE_SIGNATURES:
+                    for pat in sig["payload_patterns"]:
+                        if re.search(pat, payload, re.IGNORECASE):
+                            # Check for associated ports
+                            port_match = (
+                                not sig["associated_ports"]
+                                or tcp.dport in sig["associated_ports"]
+                                or tcp.sport in sig["associated_ports"]
+                            )
+                            if port_match:
+                                cve_matches.append({
+                                    "time": pkt_time,
+                                    "src_ip": src_ip,
+                                    "dst_ip": dst_ip,
+                                    "src_port": tcp.sport,
+                                    "dst_port": tcp.dport,
+                                    "cve_id": sig["cve_id"],
+                                    "cve_name": sig["name"],
+                                    "cve_description": sig["description"],
+                                    "mitre_techniques": sig["mitre_techniques"],
+                                    "severity": sig["severity"],
+                                    "confidence": sig["confidence"],
+                                    "matched_pattern": pat.pattern if hasattr(pat, 'pattern') else str(pat),
+                                    "payload_preview": payload[:300].decode("utf-8", errors="replace"),
+                                })
+                                break  # One CVE match per packet per signature
+                    # Only match the first CVE signature per packet
+                    if cve_matches and cve_matches[-1].get("time") == pkt_time:
+                        break
+
+            # Payload inspection (original generic patterns)
+            if pkt.haslayer(Raw) and pkt.haslayer(TCP):
+                tcp = pkt[TCP]
                 payload = pkt[Raw].load
                 for pattern in SUSPICIOUS_PAYLOAD_PATTERNS:
                     if pattern in payload:
+                        # Skip if already caught by JNDI detector
+                        if pattern in (b"${jndi:", b"${lower:", b"${upper:"):
+                            break
                         suspicious_payloads.append({
                             "time": pkt_time,
                             "src_ip": src_ip,
@@ -407,7 +632,249 @@ def analyze_pcap(file_path: str) -> list[CanonicalAlert]:
                 },
             ))
 
-    # 7. Generate a traffic summary alert
+    # ── NEW DETECTORS ────────────────────────────────────
+
+    # 7. JNDI Injection Detection (Log4Shell and variants)
+    seen_jndi_srcs = set()
+    for inj in jndi_injections:
+        # Deduplicate by source IP (multiple packets may carry the same injection)
+        dedup_key = f"{inj['src_ip']}->{inj['dst_ip']}:{inj['dst_port']}"
+        if dedup_key in seen_jndi_srcs:
+            continue
+        seen_jndi_srcs.add(dedup_key)
+
+        alerts.append(CanonicalAlert(
+            source_family="ids",
+            source_type="pcap_analysis",
+            event_time=inj["time"],
+            category="execution",
+            event_name="jndi_injection",
+            severity="critical",
+            confidence=0.95,
+            source_ip=inj["src_ip"],
+            destination_ip=inj["dst_ip"],
+            source_port=inj["src_port"],
+            destination_port=inj["dst_port"],
+            description=(
+                f"JNDI injection attack detected targeting {inj['dst_ip']}:{inj['dst_port']}. "
+                f"Callback via {inj['callback_protocol'].upper()} to {inj['callback_url']}. "
+                f"Injection in {inj['injection_field']}."
+            ),
+            mitre_technique_ids=["T1190", "T1659"],
+            mitre_tactic="initial_access",
+            risk_flags=["jndi_injection", "log4shell", "cve_exploit", "rce"],
+            raw_command=inj["jndi_string"][:500],
+            extra_data={
+                "jndi_string": inj["jndi_string"][:500],
+                "callback_url": inj["callback_url"],
+                "callback_protocol": inj["callback_protocol"],
+                "injection_field": inj["injection_field"],
+                "cve_id": "CVE-2021-44228",
+            },
+        ))
+
+    # 8. Malicious LDAP/RMI Server Detection
+    # Group callbacks by flow direction
+    callback_flows: dict[str, list] = defaultdict(list)
+    for cb in ldap_rmi_callbacks:
+        flow_key = f"{cb['src_ip']}:{cb['service_port']}->{cb['dst_ip']}"
+        callback_flows[flow_key].append(cb)
+
+    for flow_key, callbacks in callback_flows.items():
+        if not callbacks:
+            continue
+
+        first = callbacks[0]
+        responses = [c for c in callbacks if c["direction"] == "response"]
+        has_java = any(c["has_java_serial"] for c in callbacks)
+        total_bytes = sum(c["payload_size"] for c in callbacks)
+
+        severity = "critical" if has_java else "high"
+        conf = 0.90 if has_java else 0.80
+
+        alerts.append(CanonicalAlert(
+            source_family="ids",
+            source_type="pcap_analysis",
+            event_time=first["time"],
+            category="network",
+            event_name="malicious_naming_service",
+            severity=severity,
+            confidence=conf,
+            source_ip=first["src_ip"],
+            destination_ip=first["dst_ip"],
+            source_port=first["src_port"],
+            destination_port=first["dst_port"],
+            description=(
+                f"Malicious naming service detected on port {first['service_port']}. "
+                f"{len(callbacks)} packets, {len(responses)} responses, "
+                f"{total_bytes} bytes transferred"
+                f"{'. Contains Java serialized objects!' if has_java else '.'}"
+            ),
+            mitre_technique_ids=["T1071"],
+            mitre_tactic="command_and_control",
+            risk_flags=["malicious_ldap", "naming_service_attack"]
+                       + (["java_serialized_payload"] if has_java else []),
+            extra_data={
+                "service_port": first["service_port"],
+                "packet_count": len(callbacks),
+                "response_count": len(responses),
+                "total_bytes": total_bytes,
+                "has_java_serialized": has_java,
+            },
+        ))
+
+    # 9. Java Deserialization Attack Detection
+    seen_deser = set()
+    for deser in java_deser_attacks:
+        dedup_key = f"{deser['src_ip']}->{deser['dst_ip']}:{deser['dst_port']}"
+        if dedup_key in seen_deser:
+            continue
+        seen_deser.add(dedup_key)
+
+        is_gadget = len(deser["gadget_chains"]) > 0
+        severity = "critical" if is_gadget else "high"
+        conf = 0.95 if is_gadget else 0.75
+
+        alerts.append(CanonicalAlert(
+            source_family="ids",
+            source_type="pcap_analysis",
+            event_time=deser["time"],
+            category="execution",
+            event_name="java_deserialization",
+            severity=severity,
+            confidence=conf,
+            source_ip=deser["src_ip"],
+            destination_ip=deser["dst_ip"],
+            source_port=deser["src_port"],
+            destination_port=deser["dst_port"],
+            description=(
+                f"Java deserialization attack: serialized object delivered from "
+                f"{deser['src_ip']} to {deser['dst_ip']}. "
+                f"{len(deser['classes_found'])} classes found"
+                f"{', KNOWN GADGET CHAINS: ' + ', '.join(deser['gadget_chains'][:5]) if is_gadget else '.'}"
+            ),
+            mitre_technique_ids=["T1203", "T1059"],
+            mitre_tactic="execution",
+            risk_flags=["java_deserialization", "rce"]
+                       + (["known_gadget_chain"] if is_gadget else []),
+            extra_data={
+                "classes_found": deser["classes_found"][:20],
+                "gadget_chains": deser["gadget_chains"],
+                "payload_size": deser["payload_size"],
+                "serial_offset": deser["serial_offset"],
+            },
+        ))
+
+    # 10. C2 Beaconing Detection
+    for dst_key, reqs in http_beacons.items():
+        if len(reqs) < 3:
+            continue
+
+        # Check for beaconing indicators
+        times = sorted([r["time"] for r in reqs])
+        intervals = [(times[i+1] - times[i]).total_seconds() for i in range(len(times) - 1)]
+
+        # Check for rotating cookies (different cookie per request)
+        cookies = set()
+        for r in reqs:
+            cookie = r["headers"].get("cookie", "")
+            if cookie:
+                cookies.add(cookie)
+
+        # Check for fixed user-agent
+        user_agents = set()
+        for r in reqs:
+            ua = r["headers"].get("user-agent", "")
+            if ua:
+                user_agents.add(ua)
+
+        # Beaconing heuristics
+        has_rotating_cookies = len(cookies) >= 2 and len(cookies) == len(reqs)
+        has_uniform_ua = len(user_agents) == 1
+        has_regular_intervals = False
+        if intervals and len(intervals) >= 2:
+            avg_interval = sum(intervals) / len(intervals)
+            if avg_interval > 0:
+                variance = sum((i - avg_interval) ** 2 for i in intervals) / len(intervals)
+                has_regular_intervals = (variance / max(avg_interval ** 2, 1)) < 0.25  # Low variance
+
+        beacon_score = sum([has_rotating_cookies, has_uniform_ua, has_regular_intervals])
+
+        if beacon_score >= 2:
+            first = reqs[0]
+            paths = [r["request"].split(" ")[1] if " " in r["request"] else "?" for r in reqs]
+
+            alerts.append(CanonicalAlert(
+                source_family="ids",
+                source_type="pcap_analysis",
+                event_time=first["time"],
+                category="network",
+                event_name="c2_beaconing",
+                severity="high",
+                confidence=min(0.95, 0.6 + beacon_score * 0.1),
+                source_ip=first["src_ip"],
+                destination_ip=first["dst_ip"],
+                destination_port=first["dst_port"],
+                description=(
+                    f"C2 beaconing detected: {len(reqs)} requests to {dst_key}. "
+                    f"Indicators: "
+                    + ", ".join(filter(None, [
+                        "rotating cookies" if has_rotating_cookies else None,
+                        "uniform User-Agent" if has_uniform_ua else None,
+                        f"regular intervals (~{sum(intervals)/len(intervals):.0f}s)" if has_regular_intervals else None,
+                    ]))
+                ),
+                mitre_technique_ids=["T1071", "T1573"],
+                mitre_tactic="command_and_control",
+                risk_flags=["c2_beacon", "periodic_callback"]
+                           + (["rotating_session"] if has_rotating_cookies else []),
+                extra_data={
+                    "request_count": len(reqs),
+                    "paths": paths[:10],
+                    "intervals": [round(i, 1) for i in intervals[:10]],
+                    "rotating_cookies": has_rotating_cookies,
+                    "uniform_user_agent": has_uniform_ua,
+                    "regular_intervals": has_regular_intervals,
+                    "user_agent": list(user_agents)[0] if user_agents else None,
+                },
+            ))
+
+    # 11. CVE Signature Match Alerts
+    seen_cves: set[str] = set()
+    for match in cve_matches:
+        # Deduplicate by CVE + source/dest pair
+        dedup_key = f"{match['cve_id']}:{match['src_ip']}->{match['dst_ip']}"
+        if dedup_key in seen_cves:
+            continue
+        seen_cves.add(dedup_key)
+
+        alerts.append(CanonicalAlert(
+            source_family="ids",
+            source_type="pcap_analysis",
+            event_time=match["time"],
+            category="execution",
+            event_name="cve_exploit",
+            severity=match["severity"],
+            confidence=match["confidence"],
+            source_ip=match["src_ip"],
+            destination_ip=match["dst_ip"],
+            source_port=match["src_port"],
+            destination_port=match["dst_port"],
+            description=(
+                f"CVE exploit detected: {match['cve_id']} ({match['cve_name']}). "
+                f"{match['cve_description']}"
+            ),
+            mitre_technique_ids=match["mitre_techniques"],
+            mitre_tactic="initial_access",
+            risk_flags=["cve_exploit", match["cve_id"].lower().replace("-", "_")],
+            extra_data={
+                "cve_id": match["cve_id"],
+                "cve_name": match["cve_name"],
+                "cve_description": match["cve_description"],
+            },
+        ))
+
+    # 12. Generate a traffic summary alert
     if total_packets > 0:
         unique_src_ips = set()
         unique_dst_ips = set()
@@ -428,6 +895,9 @@ def analyze_pcap(file_path: str) -> list[CanonicalAlert]:
                 f"PCAP analysis complete: {total_packets} packets, "
                 f"{len(unique_src_ips)} source IPs, {len(unique_dst_ips)} destination IPs, "
                 f"{len(tcp_sessions)} TCP sessions, {len(dns_queries)} DNS queries"
+                + (f", {len(jndi_injections)} JNDI injections" if jndi_injections else "")
+                + (f", {len(java_deser_attacks)} Java deser attacks" if java_deser_attacks else "")
+                + (f", {len(cve_matches)} CVE signature hits" if cve_matches else "")
             ),
             mitre_technique_ids=[],
             mitre_tactic="",
@@ -440,6 +910,11 @@ def analyze_pcap(file_path: str) -> list[CanonicalAlert]:
                 "dns_queries": len(dns_queries),
                 "http_requests": len(http_requests),
                 "suspicious_payloads": len(suspicious_payloads),
+                "jndi_injections": len(jndi_injections),
+                "ldap_rmi_callbacks": len(ldap_rmi_callbacks),
+                "java_deser_attacks": len(java_deser_attacks),
+                "cve_matches": len(cve_matches),
+                "c2_beacons": sum(1 for k, v in http_beacons.items() if len(v) >= 3),
                 "time_range": {
                     "start": pcap_start_time.isoformat() if pcap_start_time else None,
                     "end": pcap_end_time.isoformat() if pcap_end_time else None,
@@ -453,6 +928,120 @@ def analyze_pcap(file_path: str) -> list[CanonicalAlert]:
         file=file_path,
         total_packets=total_packets,
         alerts_generated=len(alerts),
+        jndi_injections=len(jndi_injections),
+        java_deser=len(java_deser_attacks),
+        cve_matches=len(cve_matches),
     )
 
     return alerts
+
+
+# ── Helper Functions ─────────────────────────────────────
+
+def _extract_jndi_string(payload_fragment: bytes) -> str:
+    """Extract the full ${jndi:...} string from a payload fragment."""
+    try:
+        text = payload_fragment.decode("utf-8", errors="replace")
+    except Exception:
+        return "(binary)"
+
+    depth = 0
+    result = []
+    for ch in text:
+        if ch == "$" and not result:
+            result.append(ch)
+        elif result:
+            result.append(ch)
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth <= 0:
+                    break
+
+    extracted = "".join(result) if result else text[:100]
+    return extracted[:500]
+
+
+def _extract_callback_url(jndi_string: str) -> str:
+    """Extract the callback URL from a JNDI string."""
+    # Try to find ldap://, rmi://, dns:// patterns
+    for proto in ["ldap://", "rmi://", "ldaps://", "dns://", "iiop://"]:
+        idx = jndi_string.lower().find(proto)
+        if idx >= 0:
+            url = jndi_string[idx:]
+            # Trim at closing brace or whitespace
+            for end_ch in ["}", " ", "\r", "\n", "\t", ","]:
+                end_idx = url.find(end_ch)
+                if end_idx > 0:
+                    url = url[:end_idx]
+            return url
+    return "(embedded)"
+
+
+def _extract_callback_protocol(jndi_string: str) -> str:
+    """Identify the callback protocol (ldap, rmi, dns, etc.)."""
+    lower = jndi_string.lower()
+    for proto in ["ldap", "ldaps", "rmi", "dns", "iiop", "http", "https"]:
+        if f"{proto}://" in lower:
+            return proto
+    return "unknown"
+
+
+def _identify_injection_field(payload: bytes, jndi_offset: int) -> str:
+    """Identify which HTTP field contains the JNDI injection."""
+    try:
+        text = payload[:jndi_offset].decode("utf-8", errors="replace")
+    except Exception:
+        return "unknown"
+
+    # Look backwards from the injection point for header names
+    lower = text.lower()
+    header_markers = [
+        ("user-agent:", "User-Agent header"),
+        ("referer:", "Referer header"),
+        ("x-forwarded-for:", "X-Forwarded-For header"),
+        ("x-api-version:", "X-API-Version header"),
+        ("authorization:", "Authorization header"),
+        ("cookie:", "Cookie header"),
+        ("content-type:", "Content-Type header"),
+        ("accept:", "Accept header"),
+        ("x-", "custom header"),
+    ]
+
+    for marker, label in header_markers:
+        if marker in lower:
+            return label
+
+    # Check if it's in the URL path
+    if text.startswith(("GET ", "POST ", "PUT ", "DELETE ")):
+        return "URL path/query"
+
+    # Check if it's in the body
+    if "\r\n\r\n" in text:
+        return "request body"
+
+    return "HTTP header"
+
+
+def _extract_java_classes(payload: bytes) -> list[str]:
+    """Extract Java class names from a serialized object stream."""
+    classes = []
+    try:
+        # Find class name patterns in the binary stream
+        # Java serialized class names are typically in the format:
+        # package.name.ClassName
+        pattern = rb'[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*){2,}'
+        matches = re.findall(pattern, payload)
+        seen = set()
+        for m in matches:
+            try:
+                class_name = m.decode("utf-8")
+                if class_name not in seen and len(class_name) > 5:
+                    seen.add(class_name)
+                    classes.append(class_name)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return classes

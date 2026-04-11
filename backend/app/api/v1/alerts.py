@@ -64,24 +64,52 @@ async def ingest_bulk_alerts(
     request: AlertBulkIngestRequest,
     session: AsyncSession = Depends(get_db_session),
     sync_processing: bool = Query(False, description="Process synchronously"),
+    auto_summarize: bool = Query(False, description="Auto-generate AI summaries after correlation"),
+    generation_type: str = Query("ai_generated", description="Summary type: ai_generated or deterministic"),
 ):
     """Ingest multiple alerts in a single batch (max 500)."""
     raw_alerts = await ingest_bulk(session, request.alerts)
     await session.flush()
 
     results = []
+    incident_ids: set[str] = set()
+
     for raw_alert in raw_alerts:
         if sync_processing:
             normalized = await normalize_raw_alert(session, str(raw_alert.id))
             if normalized:
                 await session.flush()
-                await correlate_alert(session, str(normalized.id))
+                incident = await correlate_alert(session, str(normalized.id))
                 await session.flush()
+                incident_ids.add(str(incident.id))
 
         results.append(AlertIngestResponse(
             raw_alert_id=str(raw_alert.id),
             status="accepted",
         ))
+
+    # Auto-generate summaries for all correlated incidents
+    if auto_summarize and sync_processing and incident_ids:
+        from app.services.summary_service import generate_summary
+        from app.models.incident import Incident
+        from sqlalchemy import select
+        import uuid as _uuid
+
+        for inc_id in incident_ids:
+            try:
+                inc_result = await session.execute(
+                    select(Incident).where(Incident.id == _uuid.UUID(inc_id))
+                )
+                incident = inc_result.scalar_one_or_none()
+                if incident:
+                    await generate_summary(
+                        session, incident,
+                        force_regenerate=True,
+                        generation_type=generation_type,
+                    )
+                    await session.flush()
+            except Exception as e:
+                log.error("bulk_summary_error", incident_id=inc_id, error=str(e))
 
     return AlertBulkIngestResponse(
         accepted=len(results),

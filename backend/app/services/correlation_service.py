@@ -49,6 +49,7 @@ SERVICE_ACCOUNTS = {"system", "root", "admin", "svc_", "service", "daemon", "nob
 
 # MITRE attack chain sequences (ordered)
 ATTACK_CHAINS: list[list[str]] = [
+    ["T1190", "T1071", "T1203", "T1059"],             # Exploit -> C2 -> Deser -> Exec
     ["T1046", "T1110", "T1078", "T1059", "T1105"],  # recon → brute → login → exec → download
     ["T1110", "T1078", "T1059"],                      # brute → login → exec
     ["T1078", "T1059", "T1105"],                      # login → exec → download
@@ -370,13 +371,16 @@ async def _update_incident(
 
 def _initial_classification(alert: NormalizedAlert) -> str:
     """Initial classification from a single alert."""
+    # cve_exploitation is the most critical type usually mapped to exploits
+    if alert.event_name in ["cve_exploit", "jndi_injection", "java_deserialization"]:
+        return "cve_exploitation"
     if alert.category == "authentication" and alert.event_name == "failed_login":
         return "brute_force_attempt"
     elif alert.category == "authentication" and alert.event_name == "successful_login":
         return "account_compromise"
     elif alert.category == "execution":
         return "malware_execution"
-    elif alert.category == "network" and "scan" in (alert.event_name or ""):
+    elif alert.category == "network" and ("scan" in (alert.event_name or "") or alert.event_name == "c2_beaconing"):
         return "reconnaissance"
     else:
         return "reconnaissance"
@@ -396,6 +400,7 @@ def _initial_severity_score(alert: NormalizedAlert) -> int:
 def _build_title(alert: NormalizedAlert, classification: str) -> str:
     """Build an incident title from the first alert."""
     class_labels = {
+        "cve_exploitation": "Active Exploitation attempt",
         "account_compromise": "Potential account compromise",
         "malware_execution": "Suspicious execution activity",
         "brute_force_attempt": "Brute force attack",
@@ -411,6 +416,7 @@ def _build_title(alert: NormalizedAlert, classification: str) -> str:
 def _build_title_from_incident(incident: Incident) -> str:
     """Rebuild title from incident data (after reclassification)."""
     class_labels = {
+        "cve_exploitation": "Active Exploitation attempt",
         "account_compromise": "Potential account compromise",
         "malware_execution": "Suspicious execution activity",
         "brute_force_attempt": "Brute force attack",
@@ -421,3 +427,4 @@ def _build_title_from_incident(incident: Incident) -> str:
     label = class_labels.get(incident.classification, "Security incident")
     target = incident.primary_host or incident.primary_src_ip or "unknown"
     return f"{label} on {target}"
+

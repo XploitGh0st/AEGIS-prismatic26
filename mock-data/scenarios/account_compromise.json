@@ -1,8 +1,20 @@
 {
-  "description": "Account compromise: brute force → successful login → suspicious process execution → data access",
-  "expected_incidents": 1,
+  "description": "Account compromise chain + uncorrelated noise. Chain: brute force → successful login → encoded PowerShell → credential dump → C2 beacon. Noise: unrelated failed login + DNS query from a different IP. Expected: 2 incidents (1 correlated chain, 1 noise).",
+  "expected_incidents": 2,
   "expected_severity": "critical",
   "expected_classification": "account_compromise",
+  "correlation_notes": {
+    "chain_1": {
+      "alerts": ["ac_001", "ac_002", "ac_003", "ac_004", "ac_005"],
+      "correlation_signals": ["same_user:jsmith", "same_host:dc01.corp.local", "same_source_ip:203.0.113.50", "time_within_15m", "mitre_chain:T1110→T1078→T1059→T1003"],
+      "expected_classification": "account_compromise"
+    },
+    "chain_2": {
+      "alerts": ["ac_noise_001", "ac_noise_002"],
+      "correlation_signals": ["same_source_ip:104.21.33.17", "time_within_5m"],
+      "expected_classification": "reconnaissance"
+    }
+  },
   "alerts": [
     {
       "source_family": "siem",
@@ -16,7 +28,7 @@
         "dst_ip": "10.0.1.20",
         "username": "jsmith",
         "host": "dc01.corp.local",
-        "description": "Multiple failed login attempts for jsmith"
+        "description": "12 failed login attempts for jsmith from external IP"
       }
     },
     {
@@ -31,7 +43,7 @@
         "dst_ip": "10.0.1.20",
         "username": "jsmith",
         "host": "dc01.corp.local",
-        "description": "Successful login after multiple failures"
+        "description": "Successful login after 12 consecutive failures — credential compromise confirmed"
       }
     },
     {
@@ -48,7 +60,7 @@
         "process_name": "powershell.exe",
         "command_line": "powershell -enc SQBFAFgAKABOAGUAdwAtAE8AYgBq...",
         "encoded": true,
-        "description": "Encoded PowerShell execution after login"
+        "description": "Encoded PowerShell execution 2 minutes after brute-forced login"
       }
     },
     {
@@ -62,7 +74,7 @@
         "user": "jsmith",
         "host": "dc01.corp.local",
         "process_name": "lsass.exe",
-        "description": "Credential dumping via LSASS memory access"
+        "description": "LSASS memory access — credential dumping via Mimikatz-style technique"
       }
     },
     {
@@ -78,7 +90,35 @@
         "src_port": 49821,
         "dst_port": 443,
         "sensor": "ids01",
-        "description": "Suspected C2 beacon to known bad IP"
+        "description": "C2 beacon to known-bad IP 198.51.100.99 — TLS connection with anomalous JA3 fingerprint"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "ac_noise_001",
+      "event_time": "2026-04-09T10:03:00.000Z",
+      "payload": {
+        "event_type": "failed_login",
+        "timestamp": "2026-04-09T10:03:00.000Z",
+        "src_ip": "104.21.33.17",
+        "dst_ip": "10.0.1.55",
+        "username": "deploy_svc",
+        "host": "build01.corp.local",
+        "description": "Single failed login from unrelated Cloudflare IP — likely scanner"
+      }
+    },
+    {
+      "source_family": "siem",
+      "source_type": "splunk_mock",
+      "external_alert_id": "ac_noise_002",
+      "event_time": "2026-04-09T10:04:00.000Z",
+      "payload": {
+        "event_type": "dns_query_suspicious",
+        "timestamp": "2026-04-09T10:04:00.000Z",
+        "src_ip": "104.21.33.17",
+        "host": "build01.corp.local",
+        "description": "DNS query to rare TLD .xyz from same scanner IP"
       }
     }
   ]
